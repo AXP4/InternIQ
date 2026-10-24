@@ -43,6 +43,26 @@ def crawl() -> None:
     asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
 
 
+def write(*posting_ids: str) -> None:
+    """Build resume + cover letter (+ transcript) for each posting ID."""
+    from interniq.writer import package
+
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq write <posting id> [more ids]")
+    for posting_id in posting_ids:
+        print(f"Writing {posting_id}...")
+        s = package.write(int(posting_id))
+        p = s["package"]
+        print(f"  {s['org']}: {p['re_line']}")
+        print(f"  term: {p['term_months']} months, {p['term_start']} to {p['term_end']} | focus: {p['resume_focus']}")
+        print(f"  learning gaps: {', '.join(p['learning_gaps']) or 'none'}")
+        for note in p["notes_for_ali"]:
+            print(f"  note: {note}")
+        for problem in s["unresolved_problems"]:
+            print(f"  STILL FAILING: {problem}")
+        print(f"  files: {s['folder']}")
+
+
 def bot() -> None:
     """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
     discord_bot.run()
@@ -52,6 +72,7 @@ COMMANDS = {
     "ping": ping,
     "login": login,
     "crawl": crawl,
+    "write": write,
     "bot": bot,
 }
 
@@ -59,8 +80,9 @@ COMMANDS = {
 def main() -> None:
     parser = argparse.ArgumentParser(prog="interniq")
     parser.add_argument("command", choices=COMMANDS)
+    parser.add_argument("args", nargs="*", help="extra arguments, e.g. posting IDs for write")
     args = parser.parse_args()
-    COMMANDS[args.command]()
+    COMMANDS[args.command](*args.args)
 
 
 if __name__ == "__main__":

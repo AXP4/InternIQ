@@ -47,6 +47,7 @@ class Package(BaseModel):
     term_months: int = Field(description="Length of the term Ali will state, in months.")
     term_start: str = Field(description='Month and year, e.g. "May 2027".')
     term_end: str = Field(description='Month and year, e.g. "August 2028".')
+    term_mismatch_reason: str = Field(description="Empty if the term matches every earlier application to this company. Otherwise why it differs, e.g. this posting doesn't offer that term.")
     resume_focus: str = Field(description='Focus phrase for the resume profile line, e.g. "software development and data analytics".')
     recipient_team: str = Field(description='Bold first recipient line, e.g. "Hiring Team, DataHub" or "Hiring Team".')
     company_name: str = Field(description='Company as it should appear in the address block, e.g. "Pason Systems".')
@@ -80,7 +81,7 @@ def system_prompt() -> list[dict]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def posting_message(posting: dict, letter_wanted: bool) -> str:
+def posting_message(posting: dict, letter_wanted: bool, earlier: list[dict]) -> str:
     fields = {
         k: posting.get(k)
         for k in ["id", "title", "org", "division", "location", "term", "term_start", "duration",
@@ -96,17 +97,19 @@ def posting_message(posting: dict, letter_wanted: bool) -> str:
         f"Today's date is {today:%B} {today.day}, {today:%Y}.\n\n"
         "Note: Elevate's list shows \"May 2027 - August 2028\" as the term for every posting; "
         "trust the posting's own start date, duration, and description instead.\n\n"
-        f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n{task}"
+        f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n"
+        "Earlier applications to this company (use the same term unless this posting doesn't offer it):\n"
+        f"{json.dumps(earlier, indent=1, ensure_ascii=False) if earlier else 'none'}\n\n{task}"
     )
 
 
 class Composer:
     """One conversation per posting, so fix requests keep the earlier draft in context."""
 
-    def __init__(self, posting: dict, letter_wanted: bool = True):
+    def __init__(self, posting: dict, letter_wanted: bool = True, earlier: list[dict] | None = None):
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         self.system = system_prompt()
-        self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted)}]
+        self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted, earlier or [])}]
 
     def _ask(self) -> Package:
         response = self.client.beta.messages.parse(

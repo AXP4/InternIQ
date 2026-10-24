@@ -22,6 +22,22 @@ def load_posting(posting_id: int) -> dict:
     return posting
 
 
+def earlier_applications(posting: dict) -> list[dict]:
+    """Packages already made for the same employer (until Phase 6 records real submissions)."""
+    earlier = []
+    for path in sorted(OUTPUT_DIR.glob("*/package.json")):
+        if not path.parent.name.isdigit() or int(path.parent.name) == posting["id"]:
+            continue  # skip saved comparison copies like 152559_v1, and this posting itself
+        s = json.loads(path.read_text(encoding="utf-8"))
+        if s["org"] == posting["org"]:
+            p = s["package"]
+            earlier.append({
+                "posting_id": s["posting_id"], "title": s["title"],
+                "term_months": p["term_months"], "term_start": p["term_start"], "term_end": p["term_end"],
+            })
+    return earlier
+
+
 def letter_wanted(posting: dict) -> bool:
     """Only write a letter when the posting lists one or mentions one."""
     text = f"{posting.get('description') or ''} {posting.get('additional_info') or ''}".lower()
@@ -69,10 +85,12 @@ def write(posting_id: int) -> dict:
     data = resume.load()
 
     with_letter = letter_wanted(posting)
-    composer = Composer(posting, with_letter)
+    earlier = earlier_applications(posting)
+    composer = Composer(posting, with_letter, earlier)
 
     def problems_in(package: Package) -> list[str]:
         found = checks.check(package, posting) if with_letter else []
+        found += checks.same_company_term(package, earlier)
         return found + render(package, out_dir, data, with_letter)
 
     package = composer.draft()

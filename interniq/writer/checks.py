@@ -42,3 +42,17 @@ def check(package: Package, posting: dict) -> list[str]:
         if company.lower() not in org and re.search(rf"\b{company}\b", body):
             problems.append(f'The letter mentions {company}, which is not this employer (copied from an example?).')
     return problems
+
+
+def same_company_term(package: Package, earlier: list[dict]) -> list[str]:
+    """A different term from an earlier application to the same company needs a reason."""
+    mine = (package.term_months, package.term_start, package.term_end)
+    for app in earlier:
+        theirs = (app["term_months"], app["term_start"], app["term_end"])
+        if theirs != mine and not package.term_mismatch_reason.strip():
+            return [
+                f"An earlier application to this company ({app['title']}) states {theirs[0]} months, "
+                f"{theirs[1]} to {theirs[2]}, but this one states {mine[0]} months, {mine[1]} to {mine[2]}. "
+                "Use the same term, or if this posting doesn't offer it, explain in term_mismatch_reason."
+            ]
+    return []

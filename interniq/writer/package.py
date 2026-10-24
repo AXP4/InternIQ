@@ -1,11 +1,8 @@
 """Builds one complete application package: resume, cover letter, transcript."""
 
 import json
-import re
 import shutil
 from datetime import date
-
-import yaml
 
 from interniq import config, db
 from interniq.writer import checks, letter, resume
@@ -13,7 +10,6 @@ from interniq.writer.compose import Composer, Package
 
 OUTPUT_DIR = config.ROOT / "data" / "output"
 TRANSCRIPT = config.ROOT / "data" / "base" / "transcript.pdf"
-PAST_APPLICATIONS = config.ROOT / "config" / "past_applications.yaml"
 MAX_FIXES = 2
 
 
@@ -26,32 +22,6 @@ def load_posting(posting_id: int) -> dict:
     return posting
 
 
-def same_company(org: str, entry: dict) -> bool:
-    names = [entry["company"]] + entry.get("aliases", [])
-    return any(re.search(rf"\b{re.escape(name)}\b", org, flags=re.IGNORECASE) for name in names)
-
-
-def earlier_applications(posting: dict) -> list[dict]:
-    """Earlier applications to the same employer: Ali's hand-made list plus packages
-    InternIQ already made (until Phase 6 records real submissions)."""
-    earlier = []
-    if PAST_APPLICATIONS.exists():
-        for entry in yaml.safe_load(PAST_APPLICATIONS.read_text(encoding="utf-8")) or []:
-            if same_company(posting["org"], entry):
-                earlier.append({k: v for k, v in entry.items() if k != "aliases"})
-    for path in sorted(OUTPUT_DIR.glob("*/package.json")):
-        if not path.parent.name.isdigit() or int(path.parent.name) == posting["id"]:
-            continue  # skip saved comparison copies like 152559_v1, and this posting itself
-        s = json.loads(path.read_text(encoding="utf-8"))
-        if s["org"] == posting["org"]:
-            p = s["package"]
-            earlier.append({
-                "posting_id": s["posting_id"], "title": s["title"],
-                "term_months": p["term_months"], "term_start": p["term_start"], "term_end": p["term_end"],
-            })
-    return earlier
-
-
 def letter_wanted(posting: dict) -> bool:
     """Only write a letter when the posting lists one or mentions one."""
     text = f"{posting.get('description') or ''} {posting.get('additional_info') or ''}".lower()
@@ -62,7 +32,7 @@ def render(package: Package, out_dir, data: dict, with_letter: bool) -> list[str
     """Write the PDFs. Returns layout problems (profile too long, letter too long)."""
     problems = []
     try:
-        profile = resume.profile_line(package.term_months, package.resume_focus, package.term_start, package.term_end)
+        profile = resume.profile_line(package.resume_focus)
         resume.build(out_dir / package.resume_file_name, profile, data)
     except ValueError as e:
         problems.append(f"{e}. Use a shorter resume_focus.")
@@ -99,8 +69,7 @@ def write(posting_id: int) -> dict:
     data = resume.load()
 
     with_letter = letter_wanted(posting)
-    earlier = earlier_applications(posting)
-    composer = Composer(posting, with_letter, earlier)
+    composer = Composer(posting, with_letter)
 
     def problems_in(package: Package) -> list[str]:
         found = checks.check(package, posting) if with_letter else []
@@ -134,7 +103,6 @@ def write(posting_id: int) -> dict:
         "cover_letter": with_letter,
         "fix_rounds": fixes,
         "unresolved_problems": problems,
-        "warnings": checks.same_company_term(package, earlier),
         "package": package.model_dump(),
     }
     (out_dir / "package.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")

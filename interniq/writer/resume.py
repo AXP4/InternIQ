@@ -19,8 +19,8 @@ from interniq.writer import fonts
 
 RESUME_YAML = config.ROOT / "config" / "resume.yaml"
 PROFILE_TEMPLATE = (
-    "Dedicated Software Engineering student at University of Calgary seeking {article} {months} month "
-    "internship in {focus}. Available {start} through {end}."
+    "Dedicated Software Engineering student at University of Calgary seeking an internship in "
+    "{focus}. Available January 2027 through August 2028."
 )
 
 W, H = LETTER
@@ -71,14 +71,8 @@ def wrap(text: str, font: str, width: float, first_width: float | None = None) -
     return lines
 
 
-def article(number: int | str) -> str:
-    """'an' before numbers that start with a vowel sound (8, 11, 18, 80...), else 'a'."""
-    n = str(number)
-    return "an" if n.startswith("8") or n in ("11", "18") else "a"
-
-
-def profile_line(months: int, focus: str, start: str, end: str) -> str:
-    text = PROFILE_TEMPLATE.format(article=article(months), months=months, focus=focus, start=start, end=end)
+def profile_line(focus: str) -> str:
+    text = PROFILE_TEMPLATE.format(focus=focus)
     if len(wrap(text, REGULAR, RIGHT - LEFT)) > 2:
         raise ValueError(f"Profile line is longer than 2 lines: {text}")
     return text

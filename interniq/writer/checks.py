@@ -3,16 +3,31 @@
 import re
 
 from interniq.writer.compose import Package
-from interniq.writer.resume import article
 
 DASHES = {"—": "em dash", "–": "en dash", "‒": "figure dash", "―": "dash", "-": "hyphen"}
 BANNED = ["thrilled", "passionate", "leverag", "fast paced", "i am confident", "i'm confident", "in today's"]
 # Companies named in the example letters; a mention of one in another company's letter means a copied line.
 EXAMPLE_COMPANIES = ["Pason", "Qualcomm", "AltaGas", "AMD"]
 
+CLOSING = re.compile(
+    r"I can start in January 2027 and am available for any term through August 2028, "
+    r"(am ready to relocate to [^,]+, )?and would welcome the chance to talk\."
+)
+MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
+TERM_LENGTH = re.compile(r"\b\d+\s*months?\b", flags=re.IGNORECASE)
+PAST_AUGUST_2028 = re.compile(r"\b(September|October|November|December) 2028\b|\b20(29|[3-9]\d)\b")
+
 
 def plain(text: str) -> str:
     return re.sub(r"</?[bi]>", "", text)
+
+
+def outside_calgary(location: str) -> bool | None:
+    """True or False when the location is clear, None for remote or multiple locations."""
+    loc = (location or "").lower()
+    if "remote" in loc or "multiple" in loc or not loc:
+        return None
+    return "calgary" not in loc
 
 
 def check(package: Package, posting: dict) -> list[str]:
@@ -27,42 +42,30 @@ def check(package: Package, posting: dict) -> list[str]:
         if char in body:
             sample = body[max(0, body.index(char) - 25): body.index(char) + 25]
             problems.append(f'The letter body contains a {name} ("...{sample}..."). Rewrite without any dash.')
-    for match in re.finditer(r"\b(a|an) (\d+)\b", body, flags=re.IGNORECASE):
-        word, number = match.group(1), match.group(2)
-        if word.lower() != article(number):
-            problems.append(f'Write "{article(number)} {number}", not "{match.group(0)}".')
     for phrase in BANNED:
         if phrase in lowered:
             problems.append(f'The letter uses "{phrase}", which sounds generated. Rephrase plainly.')
-    for when in (package.term_start, package.term_end):
-        if when not in body:
-            problems.append(f'The letter body never states "{when}"; the closing must give the term dates.')
-    if not ("January 2027" in body and "August 2028" in body):
-        problems.append("The closing needs one short line saying Ali is flexible on any term "
-                        "between January 2027 and August 2028.")
-    late = re.search(r"\b(September|October|November|December) 2028\b|\b(through|until|to|into) \w* ?2029\b", body)
-    if late:
-        problems.append(f'The letter offers availability past August 2028 ("{late.group(0)}"). Ali returns to school then.')
+
+    closing = CLOSING.search(plain(package.paragraphs[-1])) if package.paragraphs else None
+    away = outside_calgary(posting.get("location"))
+    if not closing:
+        problems.append('The last paragraph must contain the exact sentence "I can start in January 2027 and '
+                        'am available for any term through August 2028, and would welcome the chance to talk." '
+                        '(with "am ready to relocate to {city}, " before "and would welcome" if the job is outside Calgary).')
+    elif away is True and not closing.group(1):
+        problems.append('This job is outside Calgary: add "am ready to relocate to {city}, " before "and would welcome".')
+    elif away is False and closing.group(1):
+        problems.append("This job is in Calgary: remove the relocation clause from the closing.")
+    if TERM_LENGTH.search(body):
+        problems.append(f'The letter mentions a term length ("{TERM_LENGTH.search(body).group(0)}"). '
+                        "State only the January 2027 through August 2028 availability.")
+    if late := PAST_AUGUST_2028.search(body):
+        problems.append(f'The letter mentions a date past August 2028 ("{late.group(0)}"). Ali returns to school then.')
+    if TERM_LENGTH.search(package.re_line) or re.search(rf"\b({MONTHS}) 20\d\d\b", package.re_line):
+        problems.append(f'The Re: line must be the job title only, with no term: "{package.re_line}".')
+
     org = (posting.get("org") or "").lower()
     for company in EXAMPLE_COMPANIES:
         if company.lower() not in org and re.search(rf"\b{company}\b", body):
             problems.append(f'The letter mentions {company}, which is not this employer (copied from an example?).')
     return problems
-
-
-def same_company_term(package: Package, earlier: list[dict]) -> list[str]:
-    """Warn Ali when the term differs from earlier applications to the same company.
-
-    A warning for the approval card, not a problem to fix: the term rules decide the term.
-    Entries without a full term (unconfirmed ones) are skipped.
-    """
-    mine = (package.term_months, package.term_start, package.term_end)
-    known = {(a["term_months"], a["term_start"], a["term_end"]) for a in earlier if a.get("term_months")}
-    if not known or mine in known:
-        return []
-    listed = "; ".join(f"{m} months, {s} to {e}" for m, s, e in sorted(known))
-    reason = f" Reason: {package.term_mismatch_reason}" if package.term_mismatch_reason.strip() else ""
-    return [
-        f"Earlier applications to this company used {listed}; this one states {mine[0]} months, "
-        f"{mine[1]} to {mine[2]}.{reason}"
-    ]

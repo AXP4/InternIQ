@@ -38,23 +38,19 @@ layout, PCB, silicon validation), mechanical or civil design.
 - Closed roles: if the employer link is dead or the posting says closed, mark `closed`
   and tell Ali.
 
-## 2. Term choice
-- **Length priority:** pick the most preferred length the posting offers, in this order:
-  12 months, then 16, then 8, then 4.
-- **Start:** always pick the January 2027 start when the posting offers one. Only use another
-  start if January isn't offered. Use the posting's exact dates.
+## 2. Availability and term choice
 - **Ali's window:** January 2027 through August 2028. Never offer availability past
   August 2028 (he returns to school in September 2028).
-- If the form allows selecting more than one term, select every term Ali could do.
-- The resume profile line, cover letter, and form answers must all state the same chosen term.
-- Earlier applications to the same company (`config/past_applications.yaml` plus packages
-  InternIQ made) don't change the term. A different term from an earlier application is only
-  shown to Ali as a warning on the approval card.
+- The resume and cover letter state only that window, never a term length.
+- Term selection only happens on application forms that force a choice:
+  - **Length priority:** 12 months, then 16, then 8, then 4.
+  - **Start:** always the January 2027 start when offered; otherwise the posting's other start.
+  - If the form allows more than one selection, select every term Ali could do.
 
 ## 3. Resume profile line
 Template:
-> Dedicated Software Engineering student at University of Calgary seeking a {N} month
-> internship in {focus}. Available {start month year} through {end month year}.
+> Dedicated Software Engineering student at University of Calgary seeking an internship in
+> {focus}. Available January 2027 through August 2028.
 
 `{focus}` examples: "software development", "software development and data analytics",
 "machine learning and software development", "AI, data, and software development",
@@ -72,9 +68,10 @@ Keep the profile to 2 lines.
 - Name the posting's tools Ali does NOT have honestly, as "the parts I'd be learning".
 - If the posting asks a question to answer in the cover letter, answer it explicitly
   (for example D-Pace's "Objective / Process / Outcome").
-- Close with availability: state the chosen term and dates, then one short line that Ali is
-  flexible on any term between January 2027 and August 2028. Then willingness to relocate if
-  the job is outside Calgary, and "I'd welcome the chance to talk."
+- The closing sentence is exactly: "I can start in January 2027 and am available for any
+  term through August 2028, and would welcome the chance to talk." When the job is outside
+  Calgary, insert "am ready to relocate to {city}," before "and would welcome".
+- The Re: line is the job title only, with no term.
 - Header: "ALI ALANIZI (legal name: Ali LEGALNAME)" and the contact line.
 
 ### AI workflow mention
@@ -90,12 +87,8 @@ Keep the profile to 2 lines.
 ### Quality checks (run on every letter before saving)
 - No line may run past the page margin. If the Re: line is too long, shorten the job title or
   wrap it.
-- Use "an" before 8, 11, and 18 ("an 8 month"), "a" before other numbers. This applies to the
-  resume profile line too.
-- If Ali already applied to the same company with a different term, warn him on the approval
-  card (the term rules in section 2 still decide the term).
-- The closing states the chosen term plus the January 2027 to August 2028 flexibility line,
-  and never mentions availability past August 2028.
+- The closing uses the exact availability sentence above and never mentions availability
+  past August 2028. The Re: line has no term.
 - Only write a cover letter if the posting requires or accepts one.
 - Every listed qualification Ali actually has must be addressed in the letter (for example
   "strong interest in renewable energy" must mention renewable energy).

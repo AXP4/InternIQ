@@ -60,6 +60,8 @@ def write(*posting_ids: str) -> None:
         print(f"  learning gaps: {', '.join(p['learning_gaps']) or 'none'}")
         for note in p["notes_for_ali"]:
             print(f"  note: {note}")
+        for warning in s["warnings"]:
+            print(f"  WARNING: {warning}")
         for problem in s["unresolved_problems"]:
             print(f"  STILL FAILING: {problem}")
         print(f"  files: {s['folder']}")

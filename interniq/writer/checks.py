@@ -37,6 +37,12 @@ def check(package: Package, posting: dict) -> list[str]:
     for when in (package.term_start, package.term_end):
         if when not in body:
             problems.append(f'The letter body never states "{when}"; the closing must give the term dates.')
+    if not ("January 2027" in body and "August 2028" in body):
+        problems.append("The closing needs one short line saying Ali is flexible on any term "
+                        "between January 2027 and August 2028.")
+    late = re.search(r"\b(September|October|November|December) 2028\b|\b(through|until|to|into) \w* ?2029\b", body)
+    if late:
+        problems.append(f'The letter offers availability past August 2028 ("{late.group(0)}"). Ali returns to school then.')
     org = (posting.get("org") or "").lower()
     for company in EXAMPLE_COMPANIES:
         if company.lower() not in org and re.search(rf"\b{company}\b", body):
@@ -45,17 +51,18 @@ def check(package: Package, posting: dict) -> list[str]:
 
 
 def same_company_term(package: Package, earlier: list[dict]) -> list[str]:
-    """The term must match an earlier application to the same company, or come with a reason.
+    """Warn Ali when the term differs from earlier applications to the same company.
 
-    Entries without a full term (unconfirmed ones) are shown to Claude but not enforced.
+    A warning for the approval card, not a problem to fix: the term rules decide the term.
+    Entries without a full term (unconfirmed ones) are skipped.
     """
     mine = (package.term_months, package.term_start, package.term_end)
     known = {(a["term_months"], a["term_start"], a["term_end"]) for a in earlier if a.get("term_months")}
-    if not known or mine in known or package.term_mismatch_reason.strip():
+    if not known or mine in known:
         return []
     listed = "; ".join(f"{m} months, {s} to {e}" for m, s, e in sorted(known))
+    reason = f" Reason: {package.term_mismatch_reason}" if package.term_mismatch_reason.strip() else ""
     return [
-        f"Earlier applications to this company used: {listed}. This one states {mine[0]} months, "
-        f"{mine[1]} to {mine[2]}. Use one of those terms, or if this posting doesn't offer them, "
-        "explain in term_mismatch_reason."
+        f"Earlier applications to this company used {listed}; this one states {mine[0]} months, "
+        f"{mine[1]} to {mine[2]}.{reason}"
     ]

@@ -104,7 +104,6 @@ def write(posting_id: int) -> dict:
 
     def problems_in(package: Package) -> list[str]:
         found = checks.check(package, posting) if with_letter else []
-        found += checks.same_company_term(package, earlier)
         return found + render(package, out_dir, data, with_letter)
 
     package = composer.draft()
@@ -135,6 +134,7 @@ def write(posting_id: int) -> dict:
         "cover_letter": with_letter,
         "fix_rounds": fixes,
         "unresolved_problems": problems,
+        "warnings": checks.same_company_term(package, earlier),
         "package": package.model_dump(),
     }
     (out_dir / "package.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")

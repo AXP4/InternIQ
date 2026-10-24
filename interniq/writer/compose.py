@@ -47,7 +47,7 @@ class Package(BaseModel):
     term_months: int = Field(description="Length of the term Ali will state, in months.")
     term_start: str = Field(description='Month and year, e.g. "May 2027".')
     term_end: str = Field(description='Month and year, e.g. "August 2028".')
-    term_mismatch_reason: str = Field(description="Empty if the term matches every earlier application to this company. Otherwise why it differs, e.g. this posting doesn't offer that term.")
+    term_mismatch_reason: str = Field(description="Empty if the term matches an earlier application to this company (or there are none). Otherwise a short reason it differs, for Ali's approval card.")
     resume_focus: str = Field(description='Focus phrase for the resume profile line, e.g. "software development and data analytics".')
     recipient_team: str = Field(description='Bold first recipient line, e.g. "Hiring Team, DataHub" or "Hiring Team".')
     company_name: str = Field(description='Company as it should appear in the address block, e.g. "Pason Systems".')
@@ -98,7 +98,8 @@ def posting_message(posting: dict, letter_wanted: bool, earlier: list[dict]) -> 
         "Note: Elevate's list shows \"May 2027 - August 2028\" as the term for every posting; "
         "trust the posting's own start date, duration, and description instead.\n\n"
         f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n"
-        "Earlier applications to this company (use the same term unless this posting doesn't offer it):\n"
+        "Earlier applications to this company (context only; the term rules in RULES.md decide the "
+        "term, and a difference is shown to Ali as a warning):\n"
         f"{json.dumps(earlier, indent=1, ensure_ascii=False) if earlier else 'none'}\n\n{task}"
     )
 

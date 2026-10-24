@@ -42,6 +42,9 @@ layout, PCB, silicon validation), mechanical or civil design.
 - Ali's preferred long term: **16 months, May 2027 to August 2028.**
 - If the posting offers several lengths, pick the longest that fits and, if the form
   allows more than one choice, select every length Ali could do.
+- Start date tie break (same length offered with different starts): under 12 months, prefer
+  January; 12 months or longer, prefer May.
+- Past applications Ali made by hand are listed in `config/past_applications.yaml`.
 - January starts: use the posting's exact dates (for example January to April 2027,
   or January to August 2027).
 - The resume profile line, cover letter, and form answers must all state the same term.

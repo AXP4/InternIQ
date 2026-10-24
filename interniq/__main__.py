@@ -55,6 +55,8 @@ def write(*posting_ids: str) -> None:
         p = s["package"]
         print(f"  {s['org']}: {p['re_line']}")
         print(f"  term: {p['term_months']} months, {p['term_start']} to {p['term_end']} | focus: {p['resume_focus']}")
+        if not s["cover_letter"]:
+            print("  cover letter: not requested by the posting, resume only")
         print(f"  learning gaps: {', '.join(p['learning_gaps']) or 'none'}")
         for note in p["notes_for_ali"]:
             print(f"  note: {note}")

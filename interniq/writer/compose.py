@@ -80,27 +80,33 @@ def system_prompt() -> list[dict]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def posting_message(posting: dict) -> str:
+def posting_message(posting: dict, letter_wanted: bool) -> str:
     fields = {
         k: posting.get(k)
         for k in ["id", "title", "org", "division", "location", "term", "term_start", "duration",
                   "deadline", "procedure", "materials", "additional_info", "description", "qualifications"]
     }
     today = date.today()
+    task = (
+        "Write the package for this posting." if letter_wanted else
+        "This posting does not ask for a cover letter, so don't write one: return an empty "
+        "paragraphs list. Still choose the term and resume focus, and fill the other fields."
+    )
     return (
         f"Today's date is {today:%B} {today.day}, {today:%Y}.\n\n"
-        f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n"
-        "Write the package for this posting."
+        "Note: Elevate's list shows \"May 2027 - August 2028\" as the term for every posting; "
+        "trust the posting's own start date, duration, and description instead.\n\n"
+        f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n{task}"
     )
 
 
 class Composer:
     """One conversation per posting, so fix requests keep the earlier draft in context."""
 
-    def __init__(self, posting: dict):
+    def __init__(self, posting: dict, letter_wanted: bool = True):
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         self.system = system_prompt()
-        self.messages = [{"role": "user", "content": posting_message(posting)}]
+        self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted)}]
 
     def _ask(self) -> Package:
         response = self.client.beta.messages.parse(

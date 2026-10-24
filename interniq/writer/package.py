@@ -22,14 +22,22 @@ def load_posting(posting_id: int) -> dict:
     return posting
 
 
-def render(package: Package, out_dir, data: dict) -> list[str]:
-    """Write both PDFs. Returns layout problems (profile too long, letter too long)."""
+def letter_wanted(posting: dict) -> bool:
+    """Only write a letter when the posting lists one or mentions one."""
+    text = f"{posting.get('description') or ''} {posting.get('additional_info') or ''}".lower()
+    return any("cover" in m.lower() for m in posting["materials"]) or "cover letter" in text
+
+
+def render(package: Package, out_dir, data: dict, with_letter: bool) -> list[str]:
+    """Write the PDFs. Returns layout problems (profile too long, letter too long)."""
     problems = []
     try:
         profile = resume.profile_line(package.term_months, package.resume_focus, package.term_start, package.term_end)
         resume.build(out_dir / package.resume_file_name, profile, data)
     except ValueError as e:
         problems.append(f"{e}. Use a shorter resume_focus.")
+    if not with_letter:
+        return problems
     today = date.today()
     header = dict(
         recipient_bold=package.recipient_team,
@@ -60,21 +68,29 @@ def write(posting_id: int) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     data = resume.load()
 
-    composer = Composer(posting)
+    with_letter = letter_wanted(posting)
+    composer = Composer(posting, with_letter)
+
+    def problems_in(package: Package) -> list[str]:
+        found = checks.check(package, posting) if with_letter else []
+        return found + render(package, out_dir, data, with_letter)
+
     package = composer.draft()
-    problems = checks.check(package, posting) + render(package, out_dir, data)
+    problems = problems_in(package)
     fixes = 0
     while problems and fixes < MAX_FIXES:
         fixes += 1
         print(f"  fixing {len(problems)} problem(s): " + " | ".join(p[:80] for p in problems))
         package = composer.fix(problems)
-        problems = checks.check(package, posting) + render(package, out_dir, data)
+        problems = problems_in(package)
 
     if any("transcript" in m.lower() for m in posting["materials"]):
         shutil.copyfile(TRANSCRIPT, out_dir / "Ali_Alanizi_Transcript.pdf")
 
     # Remove files from earlier drafts that used different names.
-    keep = {package.resume_file_name, package.cover_letter_file_name, "Ali_Alanizi_Transcript.pdf", "package.json"}
+    keep = {package.resume_file_name, "Ali_Alanizi_Transcript.pdf"}
+    if with_letter:
+        keep.add(package.cover_letter_file_name)
     for old in out_dir.glob("*.pdf"):
         if old.name not in keep:
             old.unlink()
@@ -84,6 +100,7 @@ def write(posting_id: int) -> dict:
         "org": posting["org"],
         "title": posting["title"],
         "folder": str(out_dir),
+        "cover_letter": with_letter,
         "fix_rounds": fixes,
         "unresolved_problems": problems,
         "package": package.model_dump(),

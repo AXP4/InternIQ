@@ -43,10 +43,16 @@ def crawl() -> None:
     asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
 
 
+def bot() -> None:
+    """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
+    discord_bot.run()
+
+
 COMMANDS = {
     "ping": ping,
     "login": login,
     "crawl": crawl,
+    "bot": bot,
 }
 
 

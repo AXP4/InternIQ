@@ -4,14 +4,16 @@ Rule: finish, test, explain, and commit each phase before starting the next. Mar
 as they land and add a short note when something deviates from the plan. Each phase ends
 with something Ali can run and see working.
 
-## Phase 1: Setup and accounts
-- `git init`, confirm `.gitignore` covers all personal files, create
+## Phase 1: Setup and accounts ✅
+- ✅ `git init`, confirm `.gitignore` covers all personal files, create
   the GitHub repo `AXP4/InternIQ` (private until Phase 9), set `origin`, first commit
   and push.
-- Create the code structure from `ARCHITECTURE.md`, virtual env, `requirements.txt`.
-- Walk Ali through: getting an Anthropic API key, creating a private Discord server,
+- ✅ Create the code structure from `ARCHITECTURE.md`, virtual env, `requirements.txt`.
+- ✅ Walk Ali through: getting an Anthropic API key, creating a private Discord server,
   creating a Discord bot in the Developer Portal, inviting it, and filling `.env`.
-- **Done when:** `python -m interniq ping` posts "InternIQ is alive" in Discord.
+- ✅ **Done when:** `python -m interniq ping` posts "InternIQ is alive" in Discord.
+- Notes: the venv uses Python 3.12 (`py -3.12 -m venv .venv`) alongside other installed
+  versions. Ping posts to `#log`. The Anthropic API key expires Sep 1, 2027.
 
 ## Phase 2: Elevate crawler (read only)
 - Persistent Playwright browser; Ali logs into Elevate once.

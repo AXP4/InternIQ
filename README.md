@@ -10,3 +10,13 @@ Discord card so I can approve every submission with one tap.
 Status: in development. See `BUILDORDER.md`.
 
 Stack: Python, Playwright, Claude API (tool use), discord.py, SQLite.
+
+## Setup (Windows)
+```
+py -3.12 -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env                              # then fill it in
+copy config\answers.example.yaml config\answers.yaml
+python -m interniq ping                             # posts "InternIQ is alive" in Discord
+```

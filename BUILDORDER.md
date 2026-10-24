@@ -36,13 +36,26 @@ with something Ali can run and see working.
     Elevate), 10 Employer Email. Sites seen: iCIMS, Greenhouse, Workday, Avature,
     SuccessFactors, Oracle, Eightfold, ADP, Raise, Oleeo, Dayforce, BambooHR, custom.
 
-## Phase 3: Resume and cover letter generator
-- Convert Ali's resume into `config/resume.yaml` and rebuild it as a PDF that looks
+## Phase 3: Resume and cover letter generator ✅
+- ✅ Convert Ali's resume into `config/resume.yaml` and rebuild it as a PDF that looks
   like his current one (centered name, legal name line, same sections).
-- Port the cover letter design from `reference/letter_lib.py`.
-- Claude writes letter paragraphs from `profile_facts.md` and `RULES.md`.
-- Automatic checks: no dashes in letter body, one page, correct names and dates.
-- **Done when:** Ali gives 3 real postings and is happy with all 3 packages.
+- ✅ Port the cover letter design from `reference/letter_lib.py`.
+- ✅ Claude writes letter paragraphs from `profile_facts.md` and `RULES.md`.
+- ✅ Automatic checks: no dashes in letter body, one page, correct names and dates.
+- ✅ **Done when:** Ali gives 3 real postings and is happy with all 3 packages
+  (South Bow 152720, SeisWare 152801, AMD 152559).
+- Notes:
+  - Fonts (Carlito for the resume, Roboto for the letter) live in `data/base/fonts/`; the
+    resume name uses Windows Arial Bold, which matches the original Liberation Sans Bold.
+  - Ali added rules while reviewing the samples: AI workflow mention by posting stance,
+    margin check, letter only when the posting asks for one, top 3 learning gaps, and a
+    fixed resume focus phrase list.
+  - Availability changed from a per posting term to one window: documents never state a
+    term length, only "January 2027 through August 2028", with an exact closing sentence.
+    Term choice moved to the applier (forms that force one).
+  - Elevate's Term column shows "May 2027 - August 2028" on every posting; the real term is
+    in the posting's own fields and description.
+  - `python -m interniq write <id> ...` builds a package into `data/output/<id>/`.
 
 ## Phase 4: Screener with learning mode
 - Screening prompt, JSON output, decisions table.
@@ -60,12 +73,18 @@ with something Ali can run and see working.
 - Account creation, form reading, the fill loop with tool calls, uploads, stop at
   the review page, screenshot, approval card, submit on ✅.
 - Click "I intend to apply" on Elevate after a successful submit.
+- Term questions on forms follow RULES.md section 2 (12, 16, 8, then 4 months; January
+  2027 start first; select every term Ali could do when several are allowed).
+- If a site has an optional cover letter upload for a posting that didn't ask for one, ask
+  Ali whether to write one.
 - **Done when:** one real Workday application goes through end to end with Ali approving.
 
 ## Phase 7: More site types
 - Add, one at a time: iCIMS, SuccessFactors, Greenhouse, Oracle, UltiPro, Eightfold,
   Raise (Enbridge), simple custom sites. Save site notes as they're learned.
 - Employer Email postings: draft emails for approval.
+- "Accumulate Online" postings (14 in the first crawl): apply inside Elevate itself, same
+  approval flow. Left for the end by Ali's decision, along with other odd cases.
 - **Done when:** every ATS seen in the current ENSF backlog is handled or cleanly
   handed to Ali.
 

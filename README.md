@@ -19,4 +19,16 @@ pip install -r requirements.txt
 copy .env.example .env                              # then fill it in
 copy config\answers.example.yaml config\answers.yaml
 python -m interniq ping                             # posts "InternIQ is alive" in Discord
+python -m playwright install chromium
+```
+
+Fonts for the resume and cover letter go in `data/base/fonts/`: Carlito (Regular, Bold,
+Italic, BoldItalic) from Google Fonts and Roboto (Regular, Bold, Italic, BoldItalic).
+
+## Commands
+```
+python -m interniq login              # log into Elevate once in the agent's browser
+python -m interniq crawl              # save new ENSF postings and check employer links
+python -m interniq write <id> [ids]   # build resume + cover letter into data/output/<id>/
+python -m interniq bot                # keep the Discord bot online (!status)
 ```

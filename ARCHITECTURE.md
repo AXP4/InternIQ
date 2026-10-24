@@ -64,21 +64,27 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   learning mode off with a Discord command once he trusts it.
 
 ### 4. Writer (`interniq/writer/`)
-- **Resume:** built from structured data (`config/resume.yaml`) into a PDF with a fixed
-  template that matches Ali's current resume design. Only the profile line changes per
-  job (term length, dates, focus). Do NOT edit the old PDF with overlays; rebuild it
-  from data every time.
-- **Cover letter:** Claude Sonnet drafts paragraphs using `config/letter_template.md`
-  (structure and reusable project blocks), only facts from `config/profile_facts.md`,
-  and the writing rules in `RULES.md`. `data/base/example_letters/` holds four real
-  letters Ali approved; use them as tone and structure examples (never copy their
-  company-specific lines). A Python template renders it to PDF (see
-  `reference/letter_lib.py` for the current design).
-- **Transcript:** copied unchanged from `data/base/transcript.pdf`.
+- **Resume (`resume.py`):** built from structured data (`config/resume.yaml`) into a PDF
+  that matches Ali's master resume (spacing measured from it). Only the profile line
+  changes per job: the focus phrase, from the list in `RULES.md` section 3. Availability is
+  always "January 2027 through August 2028". Never edit the old PDF with overlays.
+- **Cover letter (`compose.py` + `letter.py`):** Claude Sonnet returns structured JSON
+  (focus, the posting's AI stance, Re: line, paragraphs, learning gaps, notes for Ali)
+  using `RULES.md`, `config/profile_facts.md`, `config/letter_template.md`, and the four
+  approved letters in `data/base/example_letters/`, all in one cached system prompt.
+  `letter.py` renders it in the approved design. A letter is only written when the
+  posting asks for one.
+- **Transcript:** copied unchanged from `data/base/transcript.pdf` when required.
 - **File names:** default `Ali_Alanizi_Resume.pdf` and `Ali_Alanizi_Cover_Letter.pdf`;
   if the posting specifies a naming convention, follow it exactly.
-- Run a check after writing: no dashes in the letter body, correct company and role
-  name, dates match the term choice, letter fits on one page.
+- **Checks (`checks.py`):** no dashes or generated sounding phrases, 4 or 5 paragraphs,
+  exact closing sentence (relocation clause only outside Calgary), no term length or date
+  past August 2028, Re: line without a term, no lines past the margin, one page, allowed
+  focus phrase, no company names copied from the example letters. Failures go back to
+  Claude to fix, up to 2 rounds.
+- **Output (`package.py`):** `data/output/<posting_id>/` holds the PDFs and `package.json`
+  (the plan, notes for Ali, and any unresolved problems).
+- Fonts: `data/base/fonts/` (Carlito, Roboto) plus Windows Arial Bold.
 
 ### 5. Applier (`interniq/applier/`)
 - Opens the employer link from the posting. Detects the application system

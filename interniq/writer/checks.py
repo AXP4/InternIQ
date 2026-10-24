@@ -3,6 +3,7 @@
 import re
 
 from interniq.writer.compose import Package
+from interniq.writer.resume import article
 
 DASHES = {"—": "em dash", "–": "en dash", "‒": "figure dash", "―": "dash", "-": "hyphen"}
 BANNED = ["thrilled", "passionate", "leverag", "fast paced", "i am confident", "i'm confident", "in today's"]
@@ -26,6 +27,10 @@ def check(package: Package, posting: dict) -> list[str]:
         if char in body:
             sample = body[max(0, body.index(char) - 25): body.index(char) + 25]
             problems.append(f'The letter body contains a {name} ("...{sample}..."). Rewrite without any dash.')
+    for match in re.finditer(r"\b(a|an) (\d+)\b", body, flags=re.IGNORECASE):
+        word, number = match.group(1), match.group(2)
+        if word.lower() != article(number):
+            problems.append(f'Write "{article(number)} {number}", not "{match.group(0)}".')
     for phrase in BANNED:
         if phrase in lowered:
             problems.append(f'The letter uses "{phrase}", which sounds generated. Rephrase plainly.')

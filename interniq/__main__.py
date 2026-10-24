@@ -23,9 +23,30 @@ def login() -> None:
     print("Login saved")
 
 
+def crawl() -> None:
+    """Save new ENSF postings, check each new employer link once, report to #log."""
+    from interniq import browser, db, sites
+    from interniq.elevate import crawler
+
+    with browser.open_browser() as context:
+        print("Reading Elevate...")
+        counts = crawler.crawl(context)
+        flagged = sites.check_links(context, db.connect())
+
+    lines = [f"Crawl done: {counts['listed']} ENSF postings listed, {counts['new']} new."]
+    lines += [
+        f"Link {f['link_status']}: {f['id']} {f['org']}, {f['title']} ({f['note']})"
+        for f in flagged
+    ]
+    message = "\n".join(lines)
+    print(message)
+    asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
+
+
 COMMANDS = {
     "ping": ping,
     "login": login,
+    "crawl": crawl,
 }
 
 

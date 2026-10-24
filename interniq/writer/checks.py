@@ -9,6 +9,17 @@ BANNED = ["thrilled", "passionate", "leverag", "fast paced", "i am confident", "
 # Companies named in the example letters; a mention of one in another company's letter means a copied line.
 EXAMPLE_COMPANIES = ["Pason", "Qualcomm", "AltaGas", "AMD"]
 
+# Resume focus phrases allowed by RULES.md section 3 (add new ones only after asking Ali).
+FOCUS_PHRASES = [
+    "software development",
+    "software development and data analytics",
+    "machine learning and software development",
+    "AI, data, and software development",
+    "software development and test automation",
+    "software development and automation",
+]
+AI_FOCUS = "software development and AI assisted automation"  # AI positive postings only
+
 CLOSING = re.compile(
     r"I can start in January 2027 and am available for any term through August 2028, "
     r"(am ready to relocate to [^,]+, )?and would welcome the chance to talk\."
@@ -69,3 +80,16 @@ def check(package: Package, posting: dict) -> list[str]:
         if company.lower() not in org and re.search(rf"\b{company}\b", body):
             problems.append(f'The letter mentions {company}, which is not this employer (copied from an example?).')
     return problems
+
+
+def check_focus(package: Package) -> list[str]:
+    """The resume focus must be a listed phrase; the AI one only for AI positive postings."""
+    if package.resume_focus in FOCUS_PHRASES:
+        return []
+    if package.resume_focus == AI_FOCUS:
+        if package.ai_stance == "positive":
+            return []
+        return [f'"{AI_FOCUS}" is only allowed when the posting is AI positive. Pick another listed focus phrase.']
+    allowed = ", ".join(f'"{p}"' for p in FOCUS_PHRASES)
+    return [f'Resume focus "{package.resume_focus}" is not a listed phrase. Use one of: {allowed} '
+            f'(or "{AI_FOCUS}" for AI positive postings).']

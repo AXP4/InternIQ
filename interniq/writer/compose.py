@@ -8,6 +8,7 @@ cached system prompt, so only the posting is new on each call.
 
 import json
 from datetime import date
+from typing import Literal
 
 import anthropic
 from pydantic import BaseModel, Field
@@ -44,7 +45,8 @@ you can and explain it in notes_for_ali."""
 
 
 class Package(BaseModel):
-    resume_focus: str = Field(description='Focus phrase for the resume profile line, e.g. "software development and data analytics".')
+    ai_stance: Literal["positive", "neutral", "negative"] = Field(description="The posting's stance on AI assisted development, per the AI workflow mention rule in RULES.md.")
+    resume_focus: str = Field(description="Focus phrase for the resume profile line: one of the phrases listed in RULES.md section 3.")
     recipient_team: str = Field(description='Bold first recipient line, e.g. "Hiring Team, DataHub" or "Hiring Team".')
     company_name: str = Field(description='Company as it should appear in the address block, e.g. "Pason Systems".')
     company_location: str = Field(description='City and province or country, e.g. "Calgary, AB".')

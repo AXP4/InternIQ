@@ -73,6 +73,7 @@ def write(posting_id: int) -> dict:
 
     def problems_in(package: Package) -> list[str]:
         found = checks.check(package, posting) if with_letter else []
+        found += checks.check_focus(package)
         return found + render(package, out_dir, data, with_letter)
 
     package = composer.draft()

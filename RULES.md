@@ -52,9 +52,13 @@ Template:
 > Dedicated Software Engineering student at University of Calgary seeking an internship in
 > {focus}. Available January 2027 through August 2028.
 
-`{focus}` examples: "software development", "software development and data analytics",
-"machine learning and software development", "AI, data, and software development",
-"software development and test automation", "software development and automation".
+`{focus}` must be one of these phrases: "software development", "software development and
+data analytics", "machine learning and software development", "AI, data, and software
+development", "software development and test automation", "software development and
+automation".
+- "software development and AI assisted automation" is also allowed, but only when the posting
+  is AI positive (same test as the AI workflow mention in section 4).
+- No other focus phrases without asking Ali first.
 Keep the profile to 2 lines.
 
 ## 4. Cover letter writing rules

@@ -11,8 +11,21 @@ def ping() -> None:
     print("Posted to #log")
 
 
+def login() -> None:
+    """Open Elevate so Ali can log in once; the profile remembers it."""
+    from interniq import browser, elevate
+
+    with browser.open_browser() as context:
+        page = browser.page_of(context)
+        page.goto(elevate.JOBS_URL)
+        print("Log in to Elevate in the browser window, then close the window.")
+        page.wait_for_event("close", timeout=0)
+    print("Login saved")
+
+
 COMMANDS = {
     "ping": ping,
+    "login": login,
 }
 
 

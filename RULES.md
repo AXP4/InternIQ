@@ -71,6 +71,30 @@ Keep the profile to 2 lines.
   outside Calgary, and "I'd welcome the chance to talk."
 - Header: "ALI ALANIZI (legal name: Ali LEGALNAME)" and the contact line.
 
+### AI workflow mention
+- If the posting is AI positive (mentions AI assisted development, AI coding tools, Copilot,
+  automation with AI, or exploring AI), mention that Ali builds with AI coding tools and frame
+  it as a strength: he designs the architecture, plans the build order, decides features, and
+  reviews, tests, and debugs everything himself.
+- If the posting is neutral or doesn't mention AI, never mention the AI workflow. Just say he
+  built the project.
+- If the posting is AI negative (bans AI tools or stresses writing everything by hand), never
+  mention it, and never list Claude, ChatGPT, or Gemini as skills in the letter.
+
+### Quality checks (run on every letter before saving)
+- No line may run past the page margin. If the Re: line is too long, shorten the job title or
+  wrap it.
+- Use "an" before 8, 11, and 18 ("an 8 month"), "a" before other numbers. This applies to the
+  resume profile line too.
+- If Ali already applied to the same company, use the same term as that application unless
+  this posting doesn't offer it.
+- Only write a cover letter if the posting requires or accepts one.
+- Every listed qualification Ali actually has must be addressed in the letter (for example
+  "strong interest in renewable energy" must mention renewable energy).
+- Never describe the same project in two paragraphs.
+- "The parts I'd be learning" names the top 2 or 3 tools only, never a long list.
+- The opening says what Ali brings to the role, never just "they will train me."
+
 ## 5. Form answer rules
 - Use `config/answers.yaml` first. If a question isn't there, ask Ali, then save it.
 - Rate skills honestly. Never pick a level higher than the answer bank says.

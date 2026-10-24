@@ -21,7 +21,10 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   (gitignored). Ali logs into Elevate (UCalgary SSO + 2FA) once in this window; the
   login is saved like a normal browser.
 - Always **headed** (visible window) so Ali can solve CAPTCHAs or 2FA when asked.
-- If Elevate shows a login page, pause and ping Ali on Discord: "Log in to Elevate".
+- Elevate forgets its session when the browser closes, so each run clicks "Student
+  Login"; the saved Microsoft SSO login usually completes it with no input. If it
+  doesn't within 30 seconds, ping Ali on Discord: "Log in to Elevate".
+- `python -m interniq login` opens Elevate in this browser for a manual login.
 
 ### 2. Elevate crawler (`interniq/elevate/`)
 - Start page: `https://elevate.ucalgary.ca/myAccount/engineering/jobs-engineering.htm`
@@ -34,10 +37,22 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
 - For each posting ID not already in the database, open the posting and save the
   full text plus these fields: work term start, duration, job title, organization,
   location, description, qualifications, deadline, application procedure
-  ("Employer Website", "Employer Email", or apply inside Elevate), application link or
-  email, required materials (resume, cover letter, transcript, other), and
-  "Additional Application Information".
+  ("Employer Website", "Employer Email", or "Accumulate Online" = apply inside
+  Elevate), application link or email, required materials (resume, cover letter,
+  transcript, other), and "Additional Application Information". Every label/value
+  pair on the page is also kept as JSON (`fields`), so unusual fields aren't lost.
+- Postings open in a new tab via a form POST (no stable URL); the crawler clicks the
+  job title in the results row and refuses to click anything labelled Apply,
+  Shortlist, or Not Interested.
 - Wait 2 to 5 seconds between pages.
+- `python -m interniq crawl` runs the crawl plus link check and posts a summary to `#log`.
+
+### 2b. Link checker (`interniq/sites.py`)
+- Opens each new employer link once. Records the site type (from the URL, the final
+  URL, then the page HTML), `link_status` (ok, dead, down, error, none) and
+  `link_note` (why: HTTP 404, redirected to the job search page, "no longer
+  accepting", site maintenance). "down" links are retried next crawl.
+- Shared with the applier later, which uses the same site detection.
 
 ### 3. Screener (`interniq/screener.py`)
 - Sends the posting text plus `RULES.md` plus Ali's past decisions
@@ -92,7 +107,10 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   was unsure about. Buttons: ✅ Submit, ✏️ Fix (Ali types what to change), ❌ Skip.
 - **Question card:** one question at a time with buttons or a text reply. Answers are
   saved to the answer bank so they are never asked twice.
-- Commands: `!run`, `!status`, `!pause`, `!learning on|off`.
+- Commands: `!run`, `!status`, `!pause`, `!learning on|off`. Only messages from
+  Ali's server are answered. `python -m interniq bot` keeps the bot online.
+- Built so far: `!status` (posting counts by status, procedure, site, link status,
+  deadlines in the next 7 days).
 
 ### 7. Scheduler
 - Windows Task Scheduler runs `python -m interniq run` once a day (default 9 PM, set
@@ -100,8 +118,10 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
 
 ## Data
 SQLite `data/interniq.db` tables:
-- `postings` (id, title, org, location, term, duration, deadline, procedure, link,
-  materials, raw_text, status, timestamps)
+- `postings` (id, title, org, division, location, term, term_start, duration,
+  deadline, procedure, link, email, materials, additional_info, description,
+  qualifications, fields, raw_text, elevate_status, site, link_status, link_note,
+  status, timestamps). Schema lives in `interniq/db.py`.
 - `decisions` (posting_id, agent_decision, ali_decision, reason): the learning examples
 - `applications` (posting_id, files, submitted_at, site, account_email, notes)
 - `answers` (question_text, answer, source, last_used): mirror of the answer bank

@@ -15,13 +15,26 @@ with something Ali can run and see working.
 - Notes: the venv uses Python 3.12 (`py -3.12 -m venv .venv`) alongside other installed
   versions. Ping posts to `#log`. The Anthropic API key expires Sep 1, 2027.
 
-## Phase 2: Elevate crawler (read only)
-- Persistent Playwright browser; Ali logs into Elevate once.
-- Open ENSF Jobs, sort by App Deadline, collect every row, open each posting, save
+## Phase 2: Elevate crawler (read only) ✅
+- ✅ Persistent Playwright browser; Ali logs into Elevate once.
+- ✅ Open ENSF Jobs, sort by App Deadline, collect every row, open each posting, save
   all fields and raw text to SQLite. Follow each application link once and record
   the site type and whether the page still exists (catches dead links).
-- **Done when:** the database holds every current ENSF posting with complete fields,
+- ✅ **Done when:** the database holds every current ENSF posting with complete fields,
   and `!status` in Discord shows counts.
+- Notes:
+  - Elevate's session cookie dies when the browser closes, but the Microsoft SSO login
+    persists, so the crawler clicks "Student Login" each run and gets in automatically.
+    It pings `#questions` only if Microsoft asks for a password or 2FA again.
+  - Sorting by deadline happens in Python instead of clicking the column header (one
+    fewer page load, same order). All ENSF results fit on one page, no pagination.
+  - Postings open in a new tab through a form POST, so they can't be revisited by URL;
+    the crawler clicks the job title from the results list.
+  - Link check records `link_status` (ok, dead, down, error, none) and a `link_note`
+    explaining why. "down" (site maintenance) is retried on the next crawl.
+  - First run: 63 postings, 39 Employer Website, 14 Accumulate Online (apply inside
+    Elevate), 10 Employer Email. Sites seen: iCIMS, Greenhouse, Workday, Avature,
+    SuccessFactors, Oracle, Eightfold, ADP, Raise, Oleeo, Dayforce, BambooHR, custom.
 
 ## Phase 3: Resume and cover letter generator
 - Convert Ali's resume into `config/resume.yaml` and rebuild it as a PDF that looks

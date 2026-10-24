@@ -1,0 +1,15 @@
+# secrets and personal data
+.env
+config/answers.yaml
+config/profile_facts.md
+config/letter_template.md
+config/resume.yaml
+data/
+reference/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log

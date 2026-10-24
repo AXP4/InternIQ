@@ -1,0 +1,131 @@
+# InternIQ Architecture
+
+## The big picture
+Think of InternIQ as a small team of workers passing a folder down a line:
+
+```
+ Elevate          Screener        Writer          Applier          Ali
+ Crawler   --->   (Claude)  --->  (Claude)  --->  (Playwright  ---> (Discord
+ (reads jobs)     apply/skip/ask  resume+letter    + Claude)        approve)
+                                                   fills forms
+                        \__________ SQLite database (the shared folder) __/
+```
+
+Each worker does one job, writes its result to the database, and the next worker picks
+it up. If something breaks halfway, the agent can resume from the last saved status.
+
+## Components
+
+### 1. Browser session (`interniq/browser.py`)
+- Playwright Chromium with a **persistent profile** stored in `data/browser_profile/`
+  (gitignored). Ali logs into Elevate (UCalgary SSO + 2FA) once in this window; the
+  login is saved like a normal browser.
+- Always **headed** (visible window) so Ali can solve CAPTCHAs or 2FA when asked.
+- If Elevate shows a login page, pause and ping Ali on Discord: "Log in to Elevate".
+
+### 2. Elevate crawler (`interniq/elevate/`)
+- Start page: `https://elevate.ucalgary.ca/myAccount/engineering/jobs-engineering.htm`
+- Click the **ENSF Jobs** quick search, then sort by **App Deadline** (click the column
+  header) so the nearest deadlines come first.
+- Results table columns: App Status, Term, ID, Job Title, Organization, Division,
+  Position Type, Openings, Location, App Deadline. Each row has Shortlist and Apply
+  buttons. "Apply" on Elevate means "I intend to apply"; after clicking, the row shows
+  "Expressed Intention to Apply".
+- For each posting ID not already in the database, open the posting and save the
+  full text plus these fields: work term start, duration, job title, organization,
+  location, description, qualifications, deadline, application procedure
+  ("Employer Website", "Employer Email", or apply inside Elevate), application link or
+  email, required materials (resume, cover letter, transcript, other), and
+  "Additional Application Information".
+- Wait 2 to 5 seconds between pages.
+
+### 3. Screener (`interniq/screener.py`)
+- Sends the posting text plus `RULES.md` plus Ali's past decisions
+  (`decisions` table, used as examples) to Claude Haiku.
+- Returns structured JSON: `{decision: apply|skip|ask, reason, resume_profile,
+  term_choice, flags: [...] }`.
+- **Learning mode** (on at first): every `skip` is sent to Ali on Discord to confirm.
+  His answer is saved to `decisions` and fed back as an example next time. Ali can turn
+  learning mode off with a Discord command once he trusts it.
+
+### 4. Writer (`interniq/writer/`)
+- **Resume:** built from structured data (`config/resume.yaml`) into a PDF with a fixed
+  template that matches Ali's current resume design. Only the profile line changes per
+  job (term length, dates, focus). Do NOT edit the old PDF with overlays; rebuild it
+  from data every time.
+- **Cover letter:** Claude Sonnet drafts paragraphs using `config/letter_template.md`
+  (structure and reusable project blocks), only facts from `config/profile_facts.md`,
+  and the writing rules in `RULES.md`. `data/base/example_letters/` holds four real
+  letters Ali approved; use them as tone and structure examples (never copy their
+  company-specific lines). A Python template renders it to PDF (see
+  `reference/letter_lib.py` for the current design).
+- **Transcript:** copied unchanged from `data/base/transcript.pdf`.
+- **File names:** default `Ali_Alanizi_Resume.pdf` and `Ali_Alanizi_Cover_Letter.pdf`;
+  if the posting specifies a naming convention, follow it exactly.
+- Run a check after writing: no dashes in the letter body, correct company and role
+  name, dates match the term choice, letter fits on one page.
+
+### 5. Applier (`interniq/applier/`)
+- Opens the employer link from the posting. Detects the application system
+  (Workday, iCIMS, SuccessFactors, Greenhouse, Oracle, UltiPro, Eightfold, Raise,
+  custom) from the URL and page.
+- Creates an account if needed with the email and password pattern from `.env`.
+  Verification codes: try the Outlook API (Microsoft Graph); if UCalgary blocks it,
+  ask Ali on Discord to paste the code.
+- **Form filling loop** (this is the "agent" part):
+  1. Read the current page's form fields (labels, types, options, required flags)
+     from the page's accessibility tree.
+  2. Send them to Claude Sonnet with the answer bank and the posting.
+  3. Claude replies with tool calls: `fill_text`, `select_option`, `check_box`,
+     `upload_file`, `click_next`, `ask_ali`.
+  4. Python executes each call with Playwright, then repeats on the next page.
+- Stops on the final review page. Takes a screenshot. Never clicks Submit by itself.
+- Saves per-site notes (`site_notes` table) such as "Workday: resume autofill
+  overwrites fields, re-check experience section" so it gets better over time.
+- **Employer Email** postings: draft the email with attachments and send it to Ali for
+  approval (send automatically only if Outlook API access works).
+
+### 6. Discord bot (`interniq/discord_bot.py`)
+- Private server, one channel per purpose: `#approvals`, `#questions`, `#log`.
+- **Approval card:** company, role, location, term, deadline, files attached,
+  screenshot of the final page, any legal answers to confirm, and anything the agent
+  was unsure about. Buttons: ✅ Submit, ✏️ Fix (Ali types what to change), ❌ Skip.
+- **Question card:** one question at a time with buttons or a text reply. Answers are
+  saved to the answer bank so they are never asked twice.
+- Commands: `!run`, `!status`, `!pause`, `!learning on|off`.
+
+### 7. Scheduler
+- Windows Task Scheduler runs `python -m interniq run` once a day (default 9 PM, set
+  "wake the computer to run this task"). `!run` in Discord triggers it anytime.
+
+## Data
+SQLite `data/interniq.db` tables:
+- `postings` (id, title, org, location, term, duration, deadline, procedure, link,
+  materials, raw_text, status, timestamps)
+- `decisions` (posting_id, agent_decision, ali_decision, reason): the learning examples
+- `applications` (posting_id, files, submitted_at, site, account_email, notes)
+- `answers` (question_text, answer, source, last_used): mirror of the answer bank
+- `site_notes` (site, note)
+
+## Folder layout
+```
+InternIQ/
+  README.md  ARCHITECTURE.md  BUILDORDER.md  RULES.md
+  .env.example          -> copy to .env (gitignored)
+  requirements.txt
+  config/
+    answers.example.yaml  -> copy to answers.yaml (gitignored)
+    profile_facts.md      (gitignored, personal)
+    letter_template.md    (gitignored, personal)
+    resume.yaml           (gitignored, personal; Phase 3)
+  data/                 (gitignored)
+    base/  transcript.pdf, master resume, example_letters/, fonts
+    output/<posting_id>/
+    browser_profile/  logs/  interniq.db
+  interniq/             (the code)
+  reference/            (gitignored, old manual workflow scripts for design reference)
+```
+
+## Costs
+Claude API about $5 to $20 per month at Ali's volume. Haiku for screening keeps the
+cost low; Sonnet only for letters and forms.

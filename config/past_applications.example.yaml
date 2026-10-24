@@ -1,0 +1,12 @@
+# Copy to config/past_applications.yaml (gitignored) and list applications made by hand.
+# The writer uses these to keep the same term across applications to one company.
+# `aliases` are other names the company appears under on Elevate.
+# Leave the term fields empty when unsure and set `unconfirmed: true`; those are shown to
+# the writer but never enforced.
+
+- company: Example Corp
+  aliases: [Example Corporation Ltd.]
+  role: Software Developer Intern
+  term_months: 16
+  term_start: May 2027
+  term_end: August 2028

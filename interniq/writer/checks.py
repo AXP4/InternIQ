@@ -45,14 +45,17 @@ def check(package: Package, posting: dict) -> list[str]:
 
 
 def same_company_term(package: Package, earlier: list[dict]) -> list[str]:
-    """A different term from an earlier application to the same company needs a reason."""
+    """The term must match an earlier application to the same company, or come with a reason.
+
+    Entries without a full term (unconfirmed ones) are shown to Claude but not enforced.
+    """
     mine = (package.term_months, package.term_start, package.term_end)
-    for app in earlier:
-        theirs = (app["term_months"], app["term_start"], app["term_end"])
-        if theirs != mine and not package.term_mismatch_reason.strip():
-            return [
-                f"An earlier application to this company ({app['title']}) states {theirs[0]} months, "
-                f"{theirs[1]} to {theirs[2]}, but this one states {mine[0]} months, {mine[1]} to {mine[2]}. "
-                "Use the same term, or if this posting doesn't offer it, explain in term_mismatch_reason."
-            ]
-    return []
+    known = {(a["term_months"], a["term_start"], a["term_end"]) for a in earlier if a.get("term_months")}
+    if not known or mine in known or package.term_mismatch_reason.strip():
+        return []
+    listed = "; ".join(f"{m} months, {s} to {e}" for m, s, e in sorted(known))
+    return [
+        f"Earlier applications to this company used: {listed}. This one states {mine[0]} months, "
+        f"{mine[1]} to {mine[2]}. Use one of those terms, or if this posting doesn't offer them, "
+        "explain in term_mismatch_reason."
+    ]

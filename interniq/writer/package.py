@@ -1,8 +1,11 @@
 """Builds one complete application package: resume, cover letter, transcript."""
 
 import json
+import re
 import shutil
 from datetime import date
+
+import yaml
 
 from interniq import config, db
 from interniq.writer import checks, letter, resume
@@ -10,6 +13,7 @@ from interniq.writer.compose import Composer, Package
 
 OUTPUT_DIR = config.ROOT / "data" / "output"
 TRANSCRIPT = config.ROOT / "data" / "base" / "transcript.pdf"
+PAST_APPLICATIONS = config.ROOT / "config" / "past_applications.yaml"
 MAX_FIXES = 2
 
 
@@ -22,9 +26,19 @@ def load_posting(posting_id: int) -> dict:
     return posting
 
 
+def same_company(org: str, entry: dict) -> bool:
+    names = [entry["company"]] + entry.get("aliases", [])
+    return any(re.search(rf"\b{re.escape(name)}\b", org, flags=re.IGNORECASE) for name in names)
+
+
 def earlier_applications(posting: dict) -> list[dict]:
-    """Packages already made for the same employer (until Phase 6 records real submissions)."""
+    """Earlier applications to the same employer: Ali's hand-made list plus packages
+    InternIQ already made (until Phase 6 records real submissions)."""
     earlier = []
+    if PAST_APPLICATIONS.exists():
+        for entry in yaml.safe_load(PAST_APPLICATIONS.read_text(encoding="utf-8")) or []:
+            if same_company(posting["org"], entry):
+                earlier.append({k: v for k, v in entry.items() if k != "aliases"})
     for path in sorted(OUTPUT_DIR.glob("*/package.json")):
         if not path.parent.name.isdigit() or int(path.parent.name) == posting["id"]:
             continue  # skip saved comparison copies like 152559_v1, and this posting itself

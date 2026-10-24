@@ -31,17 +31,21 @@ def render(package: Package, out_dir, data: dict) -> list[str]:
     except ValueError as e:
         problems.append(f"{e}. Use a shorter resume_focus.")
     today = date.today()
+    header = dict(
+        recipient_bold=package.recipient_team,
+        recipient_lines=[package.company_name, package.company_location],
+        date=f"{today:%B} {today.day}, {today:%Y}",
+        re_line=package.re_line,
+        footer=f"{data['name']}  |  Cover Letter  |  {package.footer_label}",
+    )
+    problems += letter.margin_problems(**header)
     try:
         letter.build(
             out_dir / package.cover_letter_file_name,
             name=data["name"], legal_name=data["legal_name"], contact=data["letter_contact"],
-            recipient_bold=package.recipient_team,
-            recipient_lines=[package.company_name, package.company_location],
-            date=f"{today:%B} {today.day}, {today:%Y}",
-            re_line=package.re_line,
             paragraphs=package.paragraphs,
-            footer=f"{data['name']}  |  Cover Letter  |  {package.footer_label}",
             title=f"{data['name']} Cover Letter, {package.footer_label}",
+            **header,
         )
     except letter.LetterTooLong as e:
         lines = int(e.overflow // 15.5) + 1

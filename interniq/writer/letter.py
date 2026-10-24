@@ -35,6 +35,25 @@ class LetterTooLong(Exception):
         self.overflow = ends_at - BODY_LIMIT
 
 
+def margin_problems(*, recipient_bold: str, recipient_lines: list[str], date: str, re_line: str,
+                    footer: str) -> list[str]:
+    """Single line texts that would run past the right margin."""
+    fonts.register()
+    lines = [
+        ("Recipient line (shares the line with the date)", recipient_bold, "Roboto-Bold", 10,
+         TW - stringWidth(date, "Roboto", 10) - 12),
+        ("Re: line", re_line, "Roboto-Bold", 10.5, TW),
+        ("Footer", footer, "Roboto", 8.5, TW),
+    ] + [("Address line", line, "Roboto", 10, TW) for line in recipient_lines]
+    problems = []
+    for label, text, font, size, limit in lines:
+        width = stringWidth(text, font, size)
+        if width > limit:
+            over = int((width - limit) / stringWidth("x", font, size)) + 1
+            problems.append(f'{label} runs past the margin by about {over} characters: "{text}". Shorten it.')
+    return problems
+
+
 def markup(text: str) -> str:
     """Escape text for a reportlab Paragraph, keeping only <b> and <i> tags."""
     text = html.escape(text, quote=False)

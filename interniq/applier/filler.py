@@ -44,6 +44,11 @@ How to work:
 - Repeating sections (work experience, education, websites): press the section's Add
   button, then fill the new fields from resume.yaml / answers.yaml. Never add more entries
   than the source data has.
+- Documents: upload the resume to the resume question and the transcript wherever one is
+  asked for. If the posting's materials include a cover letter and the form has no
+  separate cover letter question, upload the cover letter next to the resume in the
+  Resume/CV question (it keeps both when the field accepts several files; the tool tells
+  you if it doesn't, and then record_unsure instead).
 - Call record_unsure for anything you're not fully sure about, so it shows on the card.
 - Call save_site_note when you learn a quirk of this application system worth
   remembering for every future application (not posting specific details).
@@ -160,7 +165,7 @@ class Filler:
     def fill_page(self, snapshot: dict, problems: list[str] | None = None) -> None:
         """Run the tool loop until Claude calls page_done (or the turn limit)."""
         intro = {
-            "posting": {k: self.posting.get(k) for k in ("id", "org", "title", "location", "description")},
+            "posting": {k: self.posting.get(k) for k in ("id", "org", "title", "location", "materials", "description")},
             "form_term": self.form_term,
             "documents_available": sorted(self.documents),
         }

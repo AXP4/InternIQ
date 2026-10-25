@@ -423,10 +423,18 @@ def set_date(page: Page, field_id: str, month: str = "", year: str = "", day: st
 
 
 def upload(page: Page, field_id: str, path: str) -> str:
-    field(page, field_id).locator('input[type="file"]').first.set_input_files(path)
+    """Upload one file. In a multi-file field the earlier files stay."""
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    current = describe(page, field_id).get("value", "")
+    if name in current:
+        return f"ok ({name} is already uploaded)"
+    file_input = field(page, field_id).locator('input[type="file"]').first
+    if current and file_input.get_attribute("multiple") is None:
+        return f"this field takes one file and already holds {current!r}; uploading would replace it"
+    file_input.set_input_files(path)
     page.wait_for_timeout(4000)
     got = describe(page, field_id).get("value", "")
-    return "ok" if got else "upload didn't show up"
+    return f"ok (field now shows {got!r})" if name in got else f"upload didn't show up (field shows {got!r})"
 
 
 def press_add(page: Page, button_id: str) -> str:

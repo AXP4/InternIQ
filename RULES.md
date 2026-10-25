@@ -125,6 +125,9 @@ Keep the profile to 2 lines.
 - Legal and attestation questions: pre-fill from the answer bank but always show them
   on the approval card for Ali to confirm.
 - Optional fields: leave empty unless the answer bank has a good answer.
+- If the posting asks for a cover letter and the form has no cover letter question, upload
+  it next to the resume in the Resume/CV field when that field accepts more than one file.
+  Never replace the resume to make room for it.
 - If the site parsed the resume into fields, check them against `resume.yaml` and
   fix wrong dates, titles, or merged text.
 

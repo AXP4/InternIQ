@@ -74,13 +74,20 @@ def open_application(page: Page, job_url: str) -> None:
     """Job page -> Apply -> Apply Manually (never Autofill with Resume)."""
     page.goto(job_url, wait_until="domcontentloaded")
     try:
-        page.wait_for_selector('[data-automation-id="adventureButton"]', timeout=45_000)
+        # "Continue Application" replaces "Apply" when a saved draft exists.
+        page.wait_for_selector('[data-automation-id="adventureButton"]:visible, '
+                               '[data-automation-id="continueButton"]:visible', timeout=45_000)
     except PlaywrightTimeout:
         wait_out_bot_check(page, "opening the job page")
         raise Blocked("The job page never showed an Apply button (closed posting or slow site)")
     page.wait_for_timeout(1500)
     if auto(page, "legalNoticeDeclineButton").count():
         click(auto(page, "legalNoticeDeclineButton"))
+    if page.locator('[data-automation-id="continueButton"]:visible').count():
+        click(page.locator('[data-automation-id="continueButton"]:visible'))
+        page.wait_for_timeout(6000)
+        wait_out_bot_check(page, "reopening the saved draft")
+        return
     click(auto(page, "adventureButton"))
     page.wait_for_timeout(3000)
     manual = auto(page, "applyManually")

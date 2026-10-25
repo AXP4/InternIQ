@@ -121,6 +121,24 @@ def propose(*posting_ids: str) -> None:
     print(f"Posted {len(ids)} approval card(s) to #approvals.")
 
 
+def dryrun(posting_id: str = "", job_url: str = "") -> None:
+    """Fill another job on the same site with this posting's package, stop at Review, abandon."""
+    from interniq.applier import run
+
+    if not posting_id or not job_url:
+        raise SystemExit("Usage: python -m interniq dryrun <posting id> <job url on the same site>")
+    run.run(int(posting_id), job_url, dry=True)
+
+
+def apply(posting_id: str = "") -> None:
+    """Fill the application, stop at Review, post the approval card, submit only after approval."""
+    from interniq.applier import run
+
+    if not posting_id:
+        raise SystemExit("Usage: python -m interniq apply <posting id>")
+    run.run(int(posting_id))
+
+
 def bot() -> None:
     """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
     discord_bot.run()
@@ -134,6 +152,8 @@ COMMANDS = {
     "decide": decide,
     "write": write,
     "propose": propose,
+    "dryrun": dryrun,
+    "apply": apply,
     "bot": bot,
 }
 

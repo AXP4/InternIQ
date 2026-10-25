@@ -277,3 +277,15 @@ def add_site_note(conn, site: str, note: str) -> None:
 
 def site_notes(conn, site: str) -> list[str]:
     return [r["note"] for r in conn.execute("SELECT note FROM site_notes WHERE site = ? ORDER BY id", (site,))]
+
+
+def set_application_notes(conn, posting_id: int, notes: dict) -> None:
+    with conn:
+        conn.execute("UPDATE applications SET notes = ? WHERE posting_id = ?", (json.dumps(notes), posting_id))
+
+
+def mark_submitted(conn, posting_id: int) -> None:
+    with conn:
+        conn.execute("UPDATE applications SET state = 'submitted', submitted_at = ? WHERE posting_id = ?",
+                     (now(), posting_id))
+        conn.execute("UPDATE postings SET status = 'submitted' WHERE id = ?", (posting_id,))

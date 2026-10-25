@@ -254,10 +254,20 @@ def approval_card(posting_id: int) -> Card:
         head.append(f"Flags: {', '.join(other)}")
     for problem in summary.get("unresolved_problems", []):
         head.append(f"⚠️ Check: {problem}")
+    app = db.get_application(conn, posting_id)
+    run_notes = json.loads(app["notes"]) if app and app["notes"] else {}
+    for item in run_notes.get("legal", []):
+        head.append(f"⚖️ **Confirm:** {item['question']} → **{item['answer']}**")
+    for item in run_notes.get("unsure", []):
+        head.append(f"❔ {item}")
+    if run_notes.get("screenshot"):
+        head.append("📸 The Review page screenshot is attached; the browser stays open on it until you decide.")
     if summary.get("feedback"):
         head.append(f"Your fixes so far: {' | '.join(summary['feedback'])}")
     folder = package.OUTPUT_DIR / str(posting_id)
     files = [folder / name for name in summary["files"]] if "files" in summary else sorted(folder.glob("*.pdf"))
+    if run_notes.get("screenshot") and (folder / run_notes["screenshot"]).exists():
+        files.append(folder / run_notes["screenshot"])
     tail = [f"Attached: {', '.join(p.name for p in files)}"]
     if posting.get("link"):
         tail.append(f"<{posting['link']}>")

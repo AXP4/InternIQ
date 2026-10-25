@@ -2,7 +2,7 @@
 
 Workday pages are built from containers marked `data-automation-id`, which stay the
 same across employers: `formField-<name>` wraps one question, `progressBarActiveStep`
-names the current step, `bottom-navigation-next-button` is Save and Continue (and
+names the current step, and the footer Next button is Save and Continue (and
 Submit on the Review step). This module only moves around and reads; deciding what to
 type is the form filler's job, and submitting is gated on Ali's approval.
 """
@@ -29,8 +29,10 @@ def auto(page: Page, automation_id: str):
     return page.locator(f'[data-automation-id="{automation_id}"]')
 
 
-def click(locator) -> None:
-    """Workday covers many buttons with a transparent click_filter div; force the click."""
+def click(locator, timeout: int = 45_000) -> None:
+    """Wait for the element (Workday renders slowly), then force the click: many buttons are
+    covered by a transparent click_filter div."""
+    locator.first.wait_for(state="visible", timeout=timeout)
     locator.first.scroll_into_view_if_needed()
     locator.first.click(force=True)
 
@@ -70,7 +72,12 @@ def wait_out_bot_check(page: Page, what: str) -> None:
 def open_application(page: Page, job_url: str) -> None:
     """Job page -> Apply -> Apply Manually (never Autofill with Resume)."""
     page.goto(job_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(5000)
+    try:
+        page.wait_for_selector('[data-automation-id="adventureButton"]', timeout=45_000)
+    except PlaywrightTimeout:
+        wait_out_bot_check(page, "opening the job page")
+        raise Blocked("The job page never showed an Apply button (closed posting or slow site)")
+    page.wait_for_timeout(1500)
     if auto(page, "legalNoticeDeclineButton").count():
         click(auto(page, "legalNoticeDeclineButton"))
     click(auto(page, "adventureButton"))
@@ -81,6 +88,20 @@ def open_application(page: Page, job_url: str) -> None:
     click(manual)
     page.wait_for_timeout(5000)
     wait_out_bot_check(page, "opening the application")
+
+
+def recover_error_page(page: Page) -> None:
+    """Workday sometimes shows 'Something went wrong. Please refresh the page'. Do what it
+    says, at most twice, then give up instead of hammering the site."""
+    for _ in range(2):
+        if "something went wrong" not in page.locator("body").inner_text().lower():
+            return
+        print("  Workday error page; refreshing")
+        page.wait_for_timeout(5000)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_timeout(8000)
+    if "something went wrong" in page.locator("body").inner_text().lower():
+        raise Blocked("Workday keeps showing 'Something went wrong' after two refreshes")
 
 
 def current_step(page: Page) -> str:
@@ -173,7 +194,7 @@ READ_FIELDS_JS = r"""
       f.value = checks.filter(c => c.checked).map(c => text(box.querySelector(`label[for="${c.id}"]`))).join('; '); }
     else if (checks.length === 1) { f.kind = 'checkbox'; f.value = checks[0].checked ? 'checked' : 'unchecked'; }
     else if (date) { f.kind = 'date';
-      f.value = [...box.querySelectorAll('[data-automation-id^="dateSection"] input')].map(i => i.value).join('/'); }
+      f.value = [...box.querySelectorAll('input[data-automation-id^="dateSection"]')].map(i => i.value).filter(Boolean).join('/'); }
     else if (area) { f.kind = 'textarea'; f.value = area.value; }
     else if (input) { f.kind = 'text'; f.value = input.value; }
     else { f.kind = 'other'; f.value = text(box).slice(0, 120); }
@@ -202,12 +223,23 @@ ERRORS_JS = r"""
 def read_page(page: Page) -> dict:
     """Everything the form filler needs to see about the current step."""
     page.wait_for_timeout(1500)
+    recover_error_page(page)
     return {
         "step": current_step(page),
         "fields": page.evaluate(READ_FIELDS_JS),
         "add_buttons": page.evaluate(ADD_BUTTONS_JS),
-        "errors": sorted(set(page.evaluate(ERRORS_JS))),
+        # role=alert also carries success toasts ("... successfully uploaded"); those aren't errors.
+        "errors": sorted({e for e in page.evaluate(ERRORS_JS) if "successfully" not in e.lower()}),
     }
+
+
+# Save and Continue (and Submit on Review). Newer Workday sites use pageFooterNextButton,
+# older ones bottom-navigation-next-button.
+NEXT_BUTTON = '[data-automation-id="pageFooterNextButton"], [data-automation-id="bottom-navigation-next-button"]'
+
+
+def next_button(page: Page):
+    return page.locator(NEXT_BUTTON)
 
 
 def field(page: Page, field_id: str):
@@ -217,7 +249,7 @@ def field(page: Page, field_id: str):
 def next_page(page: Page) -> str:
     """Save and Continue. Returns the new step name (unchanged if Workday showed errors)."""
     before = current_step(page)
-    click(auto(page, "bottom-navigation-next-button"))
+    click(next_button(page))
     try:
         page.wait_for_function(
             "s => { const e = document.querySelector('[data-automation-id=\"progressBarActiveStep\"]');"
@@ -232,7 +264,7 @@ def next_page(page: Page) -> str:
 def is_review(page: Page) -> bool:
     if current_step(page) == "Review":
         return True
-    button = auto(page, "bottom-navigation-next-button")
+    button = next_button(page)
     return bool(button.count() and re.search(r"^\s*submit\s*$", button.first.inner_text(), re.I))
 
 
@@ -298,6 +330,9 @@ def select_option(page: Page, field_id: str, value: str) -> str:
 
 def select_search(page: Page, field_id: str, value: str) -> str:
     """Searchable prompt fields: type, press Enter, pick the matching suggestion."""
+    current = describe(page, field_id).get("value", "")
+    if current and (words(value) in words(current) or words(current) in words(value)):
+        return f"ok (already selected {current!r})"
     box = field(page, field_id).locator("input").first
     box.click()
     box.fill(value)
@@ -352,11 +387,21 @@ def set_date(page: Page, field_id: str, month: str = "", year: str = "", day: st
     box = field(page, field_id)
     for part, value in (("Month", month), ("Day", day), ("Year", year)):
         section = box.locator(f'[data-automation-id="dateSection{part}-input"]')
+        display = box.locator(f'[data-automation-id="dateSection{part}-display"]')
         if value and section.count():
-            section.first.click()
-            section.first.type(str(value))
+            # The real input is a zero-size box under a visible display layer: click the
+            # layer (or focus the input directly), then type.
+            if display.count() and display.first.is_visible():
+                display.first.click()
+            else:
+                section.first.focus()
+            page.keyboard.type(str(value).zfill(4 if part == "Year" else 2))
     page.keyboard.press("Tab")
-    return f"ok (shows {describe(page, field_id).get('value', '')!r})"
+    got = describe(page, field_id).get("value", "")
+    wanted = [str(int(v)) if v.isdigit() else v for v in (month, day, year) if v]
+    if all(w in got.split("/") for w in wanted):
+        return f"ok (shows {got!r})"
+    return f"date didn't stick (shows {got!r})"
 
 
 def upload(page: Page, field_id: str, path: str) -> str:
@@ -373,3 +418,27 @@ def press_add(page: Page, button_id: str) -> str:
     click(button)
     page.wait_for_timeout(1500)
     return "ok, new fields added"
+
+
+# ---------- review and submit ----------
+
+SUBMITTED_TEXT = ["application submitted", "thank you for applying", "successfully submitted",
+                  "your application has been submitted", "congratulations"]
+
+
+def submit(page: Page, posting_id: int) -> bool:
+    """Click Submit on the Review page, only if Ali approved this application.
+
+    The approval check lives here, next to the click, so no caller can skip it.
+    Returns True when Workday confirms the submission.
+    """
+    app = db.get_application(db.connect(), posting_id)
+    if not app or app["state"] != "approved":
+        raise PermissionError(f"Application {posting_id} is not approved; refusing to submit")
+    if not is_review(page):
+        raise Blocked("Not on the Review page anymore (session may have timed out)")
+    click(next_button(page))
+    page.wait_for_timeout(8000)
+    wait_out_bot_check(page, "submitting")
+    text = page.locator("body").inner_text().lower()
+    return any(phrase in text for phrase in SUBMITTED_TEXT)

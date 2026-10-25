@@ -52,6 +52,21 @@ CREATE TABLE IF NOT EXISTS decisions (
     decided_at      TEXT
 );
 
+-- One row per package shown to Ali for approval. Nothing is submitted unless state is
+-- 'approved', and only Ali's Submit button sets that.
+CREATE TABLE IF NOT EXISTS applications (
+    posting_id      INTEGER PRIMARY KEY REFERENCES postings(id),
+    state           TEXT NOT NULL,  -- pending, fixing, approved, skipped, submitted
+    files           TEXT,           -- JSON list of file names in data/output/<id>/
+    fix_requests    TEXT,           -- JSON list of Ali's Fix messages
+    site            TEXT,
+    account_email   TEXT,
+    notes           TEXT,
+    proposed_at     TEXT,
+    approved_at     TEXT,
+    submitted_at    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -207,3 +222,40 @@ def agreement(conn) -> dict:
         "skips_reviewed": len(skips),
         "skips_agreed": sum(r["ali_decision"] == "skip" for r in skips),
     }
+
+
+def propose_application(conn, posting_id: int, files: list[str], site: str | None) -> None:
+    """Record that a package was sent to Ali for approval."""
+    with conn:
+        conn.execute(
+            """INSERT INTO applications (posting_id, state, files, fix_requests, site, proposed_at)
+               VALUES (?, 'pending', ?, '[]', ?, ?)
+               ON CONFLICT(posting_id) DO UPDATE SET state = 'pending', files = excluded.files,
+                   site = excluded.site, proposed_at = excluded.proposed_at""",
+            (posting_id, json.dumps(files), site, now()),
+        )
+
+
+def set_application_state(conn, posting_id: int, state: str) -> None:
+    with conn:
+        conn.execute("UPDATE applications SET state = ? WHERE posting_id = ?", (state, posting_id))
+        if state == "approved":
+            conn.execute("UPDATE applications SET approved_at = ? WHERE posting_id = ?", (now(), posting_id))
+            conn.execute("UPDATE postings SET status = 'approved' WHERE id = ?", (posting_id,))
+        elif state == "skipped":
+            # A skip at approval time is also a screening answer the screener learns from.
+            conn.execute("UPDATE postings SET status = 'skip' WHERE id = ?", (posting_id,))
+            conn.execute("UPDATE decisions SET ali_decision = 'skip', decided_at = ? WHERE posting_id = ?",
+                         (now(), posting_id))
+
+
+def add_fix_request(conn, posting_id: int, text: str) -> None:
+    row = conn.execute("SELECT fix_requests FROM applications WHERE posting_id = ?", (posting_id,)).fetchone()
+    requests = json.loads(row["fix_requests"] or "[]") + [text]
+    with conn:
+        conn.execute("UPDATE applications SET fix_requests = ?, state = 'fixing' WHERE posting_id = ?",
+                     (json.dumps(requests), posting_id))
+
+
+def get_application(conn, posting_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM applications WHERE posting_id = ?", (posting_id,)).fetchone()

@@ -106,6 +106,21 @@ def decide(choice: str = "", *posting_ids: str) -> None:
     print(f"Saved {len(answers)} answers ({choice}); updated {updated} cards in #questions.")
 
 
+def propose(*posting_ids: str) -> None:
+    """Post approval cards to #approvals, writing any package that doesn't exist yet."""
+    from interniq.writer import package
+
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq propose <posting id> [more ids]")
+    ids = [int(p) for p in posting_ids]
+    for posting_id in ids:
+        if not package.load_summary(posting_id):
+            print(f"Writing {posting_id} first...")
+            package.write(posting_id)
+    asyncio.run(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", discord_bot.propose(ids)))
+    print(f"Posted {len(ids)} approval card(s) to #approvals.")
+
+
 def bot() -> None:
     """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
     discord_bot.run()
@@ -118,6 +133,7 @@ COMMANDS = {
     "screen": screen,
     "decide": decide,
     "write": write,
+    "propose": propose,
     "bot": bot,
 }
 

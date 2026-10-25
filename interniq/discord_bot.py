@@ -1,35 +1,61 @@
 """Discord bot: posts to Ali's private server and answers commands.
 
-Review cards: every screener skip (in learning mode), every "ask", and every dead
-link gets a card in #questions with Apply / Skip buttons. The buttons carry the
-posting ID in their custom_id, so they keep working after the bot restarts.
-Approval cards for submissions come in Phase 5.
+Review cards (#questions): every screener skip (in learning mode), every "ask", and
+every dead link, with Apply / Skip buttons.
+Approval cards (#approvals): a finished package with its PDFs attached, with Submit /
+Fix / Skip buttons. Nothing is submitted without Ali's Submit tap.
+Buttons carry the posting ID in their custom_id, so they keep working after the bot
+restarts.
 """
 
+import asyncio
 import json
 import os
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 import discord
 
 from interniq import config, db
 from interniq.elevate import clean_title
+from interniq.writer import package
 
 
-def decision_view(posting_id: int) -> discord.ui.View:
-    """Apply / Skip buttons. Must be built inside the running event loop."""
+@dataclass
+class Card:
+    """One Discord message: text, optional buttons ("decide" or "approve"), attached files."""
+    text: str
+    buttons: str | None = None
+    posting_id: int | None = None
+    files: list[Path] = field(default_factory=list)
+
+
+def view_for(card: Card) -> discord.ui.View | None:
+    """The card's buttons. Views must be built inside the running event loop."""
+    if not card.buttons:
+        return None
     view = discord.ui.View(timeout=None)
-    view.add_item(DecideButton("apply", posting_id))
-    view.add_item(DecideButton("skip", posting_id))
+    if card.buttons == "decide":
+        view.add_item(DecideButton("apply", card.posting_id))
+        view.add_item(DecideButton("skip", card.posting_id))
+    else:
+        for action in ("submit", "fix", "skip"):
+            view.add_item(ApprovalButton(action, card.posting_id))
     return view
 
 
-async def send_many(channel_env: str, messages: list[tuple[str, int | None]]) -> None:
-    """Log in once and post every (text, posting_id) to the channel named in .env.
+async def post(channel: discord.abc.Messageable, card: Card) -> discord.Message:
+    kwargs = {"files": [discord.File(p) for p in card.files]}
+    view = view_for(card)
+    if view:
+        kwargs["view"] = view
+    return await channel.send(card.text, **kwargs)
 
-    A posting_id adds Apply / Skip buttons for that posting.
-    """
+
+async def send_many(channel_env: str, cards: list[Card]) -> None:
+    """Log in once and post every card to the channel named in .env."""
     token = config.require("DISCORD_BOT_TOKEN")
     target = config.channel_id(channel_env)
     client = discord.Client(intents=discord.Intents.none())
@@ -40,11 +66,8 @@ async def send_many(channel_env: str, messages: list[tuple[str, int | None]]) ->
         nonlocal error
         try:
             channel = await client.fetch_channel(target)
-            for text, posting_id in messages:
-                if posting_id is None:
-                    await channel.send(text)
-                else:
-                    await channel.send(text, view=decision_view(posting_id))
+            for card in cards:
+                await post(channel, card)
         except Exception as e:  # reported after the client closes
             error = e
         finally:
@@ -63,7 +86,7 @@ async def send_many(channel_env: str, messages: list[tuple[str, int | None]]) ->
 
 
 async def send(channel_env: str, text: str) -> None:
-    await send_many(channel_env, [(text, None)])
+    await send_many(channel_env, [Card(text)])
 
 # ---------- review cards ----------
 
@@ -127,8 +150,8 @@ async def mark_cards(answers: dict[int, str]) -> int:
 HEADLINES = {"skip": "Skip this one?", "ask": "Apply to this one?", "closed": "Link looks dead. Skip?"}
 
 
-def review_card(posting: dict, decision: dict) -> tuple[str, int]:
-    """Card text and the posting ID its Apply / Skip buttons belong to."""
+def review_card(posting: dict, decision: dict) -> Card:
+    """A #questions card with Apply / Skip buttons for one screened posting."""
     title = clean_title(posting["title"])
     due = datetime.fromisoformat(posting["deadline"]) if posting.get("deadline") else None
     deadline = f"{due:%b} {due.day}" if due else "no deadline"
@@ -143,7 +166,7 @@ def review_card(posting: dict, decision: dict) -> tuple[str, int]:
         lines.append(f"Flags: {', '.join(flags)}")
     if posting.get("link"):
         lines.append(f"<{posting['link']}>")
-    return "\n".join(lines)[:1900], posting["id"]
+    return Card("\n".join(lines)[:1900], "decide", posting["id"])
 
 
 def learning_mode(conn) -> bool:
@@ -152,6 +175,129 @@ def learning_mode(conn) -> bool:
 
 def needs_review(decision: str, learning: bool) -> bool:
     return decision in ("ask", "closed") or (decision == "skip" and learning)
+
+
+# ---------- approval cards ----------
+
+def legal_question(reason: str) -> str:
+    """The part of a screening reason that's a legal question ("... Legal: confirm X.")."""
+    return reason.split("Legal:", 1)[1].strip() if "Legal:" in reason else reason
+
+
+def approval_card(posting_id: int) -> Card:
+    """A #approvals card for a written package, with its PDFs attached."""
+    conn = db.connect()
+    posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
+    decision = conn.execute("SELECT * FROM decisions WHERE posting_id = ?", (posting_id,)).fetchone()
+    summary = package.load_summary(posting_id)
+    flags = json.loads(decision["flags"] or "[]") if decision else []
+    due = datetime.fromisoformat(posting["deadline"]) if posting.get("deadline") else None
+
+    head = [
+        f"**Ready to submit?**  `{posting_id}`",
+        f"**{posting['org']}**, {clean_title(posting['title'])}",
+        " · ".join(x for x in [posting.get("location"), f"deadline {due:%b} {due.day}" if due else None,
+                               posting.get("procedure"), posting.get("site")] if x),
+    ]
+    if decision and decision["form_term"]:
+        head.append(f"Term if the form asks: {decision['form_term']}")
+    if "legal" in flags:
+        head.append(f"⚖️ **Legal, you must confirm:** {legal_question(decision['reason'])}")
+    other = [f for f in flags if f != "legal"]
+    if other:
+        head.append(f"Flags: {', '.join(other)}")
+    for problem in summary.get("unresolved_problems", []):
+        head.append(f"⚠️ Check: {problem}")
+    if summary.get("feedback"):
+        head.append(f"Your fixes so far: {' | '.join(summary['feedback'])}")
+    folder = package.OUTPUT_DIR / str(posting_id)
+    files = [folder / name for name in summary["files"]] if "files" in summary else sorted(folder.glob("*.pdf"))
+    tail = [f"Attached: {', '.join(p.name for p in files)}"]
+    if posting.get("link"):
+        tail.append(f"<{posting['link']}>")
+
+    # Notes are the first thing to trim so the card fits Discord's 2000 character limit.
+    notes = [f"• {n}" for n in summary["package"].get("notes_for_ali", [])]
+    while notes and len("\n".join(head + ["Notes:"] + notes + tail)) > 1900:
+        notes.pop()
+    body = head + (["Notes:"] + notes if notes else []) + tail
+    return Card("\n".join(body)[:1990], "approve", posting_id, files)
+
+
+APPROVAL_LABELS = {
+    "submit": ("Submit", "✅", discord.ButtonStyle.success),
+    "fix": ("Fix", "✏️", discord.ButtonStyle.primary),
+    "skip": ("Skip", "❌", discord.ButtonStyle.secondary),
+}
+
+
+class ApprovalButton(discord.ui.DynamicItem[discord.ui.Button],
+                     template=r"approval:(?P<action>submit|fix|skip):(?P<pid>\d+)"):
+    """Submit, Fix, or Skip for one finished package."""
+
+    def __init__(self, action: str, posting_id: int):
+        label, emoji, style = APPROVAL_LABELS[action]
+        super().__init__(discord.ui.Button(label=label, emoji=emoji, style=style,
+                                           custom_id=f"approval:{action}:{posting_id}"))
+        self.action, self.posting_id = action, posting_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match, /):
+        return cls(match["action"], int(match["pid"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.guild_id != config.channel_id("DISCORD_GUILD_ID"):
+            return
+        if self.action == "fix":
+            await interaction.response.send_modal(FixModal(self.posting_id))
+            return
+        conn = db.connect()
+        if self.action == "submit":
+            db.set_application_state(conn, self.posting_id, "approved")
+            result = "✅ **Approved.** It will be submitted when the applier runs."
+        else:
+            db.set_application_state(conn, self.posting_id, "skipped")
+            result = "❌ **Skipped.** Saved as a skip for the screener too."
+        await interaction.response.edit_message(content=f"{interaction.message.content}\n{result}", view=None)
+
+
+class FixModal(discord.ui.Modal, title="What should change?"):
+    change = discord.ui.TextInput(
+        label="Your change",
+        style=discord.TextStyle.paragraph,
+        placeholder="e.g. Open with the CourseIQ testing story instead of Aislez.",
+        max_length=1000,
+    )
+
+    def __init__(self, posting_id: int):
+        super().__init__()
+        self.posting_id = posting_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        text = str(self.change.value).strip()
+        db.add_fix_request(db.connect(), self.posting_id, text)
+        await interaction.response.edit_message(
+            content=f"{interaction.message.content}\n✏️ **Fix requested:** {text}\nRewriting, a new card follows.",
+            view=None,
+        )
+        try:
+            # The writer makes blocking API calls and renders PDFs; keep the bot responsive.
+            await asyncio.to_thread(package.write, self.posting_id, text)
+            await post(interaction.channel, propose([self.posting_id])[0])
+        except Exception as e:  # tell Ali instead of failing silently
+            await interaction.followup.send(f"Fix for `{self.posting_id}` failed: {e}")
+
+
+def propose(posting_ids: list[int]) -> list[Card]:
+    """Approval cards for packages already written, recorded as pending."""
+    conn = db.connect()
+    cards = []
+    for posting_id in posting_ids:
+        card = approval_card(posting_id)
+        site = conn.execute("SELECT site FROM postings WHERE id = ?", (posting_id,)).fetchone()["site"]
+        db.propose_application(conn, posting_id, [p.name for p in card.files], site)
+        cards.append(card)
+    return cards
 
 
 # ---------- commands ----------
@@ -203,7 +349,7 @@ def run() -> None:
     intents = discord.Intents.default()
     intents.message_content = True
     client = discord.Client(intents=intents)
-    client.add_dynamic_items(DecideButton)
+    client.add_dynamic_items(DecideButton, ApprovalButton)
 
     @client.event
     async def on_ready():

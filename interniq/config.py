@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 # Models: change them here only.
-SCREEN_MODEL = "claude-haiku-4-5-20251001"  # screening and short extraction
+SCREEN_MODEL = "claude-haiku-5-5"  # screening and short extraction
 WRITE_MODEL = "claude-sonnet-5-5"  # cover letters and form filling
 
 

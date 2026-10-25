@@ -208,7 +208,8 @@ READ_FIELDS_JS = r"""
     const date = box.querySelector('[data-automation-id^="dateSection"]');
     const area = box.querySelector('textarea');
     const input = box.querySelector('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input:not([type])');
-    if (file) { f.kind = 'file'; f.value = text(box.querySelector('[data-automation-id="file-upload-item"]')); }
+    if (file) { f.kind = 'file';  // every uploaded file, not just the first
+      f.value = [...box.querySelectorAll('[data-automation-id="file-upload-item"]')].map(text).join(' | '); }
     else if (listbox) { f.kind = 'select'; f.value = text(listbox); }
     else if (multi) { f.kind = 'multiselect'; f.value = [...box.querySelectorAll('[data-automation-id="selectedItem"]')].map(text).join('; '); }
     else if (radios.length) { f.kind = 'radio';
@@ -439,9 +440,15 @@ def upload(page: Page, field_id: str, path: str) -> str:
     if current and file_input.get_attribute("multiple") is None:
         return f"this field takes one file and already holds {current!r}; uploading would replace it"
     file_input.set_input_files(path)
-    page.wait_for_timeout(4000)
-    got = describe(page, field_id).get("value", "")
-    return f"ok (field now shows {got!r})" if name in got else f"upload didn't show up (field shows {got!r})"
+    # Workday lists a new file only after the upload finishes, which can take a while;
+    # checking too early once made a good upload look failed.
+    got = ""
+    for _ in range(15):
+        page.wait_for_timeout(2000)
+        got = describe(page, field_id).get("value", "")
+        if name in got:
+            return f"ok (field now shows {got!r})"
+    return f"upload didn't show up after 30 seconds (field shows {got!r})"
 
 
 def press_add(page: Page, button_id: str) -> str:
@@ -475,3 +482,15 @@ def submit(page: Page, posting_id: int) -> bool:
     wait_out_bot_check(page, "submitting")
     text = page.locator("body").inner_text().lower()
     return any(phrase in text for phrase in SUBMITTED_TEXT)
+
+
+def files_on_review(page: Page, expected: list[str], timeout_s: int = 30) -> list[str]:
+    """Wait for the Review page to list every expected file name; return the missing ones."""
+    missing = expected
+    for _ in range(timeout_s // 2):
+        text = page.locator("body").inner_text()
+        missing = [name for name in expected if name not in text]
+        if not missing:
+            return []
+        page.wait_for_timeout(2000)
+    return missing

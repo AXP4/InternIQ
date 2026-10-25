@@ -104,6 +104,7 @@ class Filler:
         self.form_term = form_term
         self.legal: list[dict] = []
         self.unsure: list[str] = []
+        self.uploaded: set[str] = set()  # documents whose upload showed up in the field
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         notes = db.site_notes(db.connect(), site)
         text = "\n\n".join([
@@ -136,7 +137,12 @@ class Filler:
                 return wd.set_date(page, args["field_id"], args["month"], args["year"], args["day"])
             if name == "upload_file":
                 path = self.documents.get(args["document"])
-                return wd.upload(page, args["field_id"], str(path)) if path else f"Ali has no {args['document']} for this posting"
+                if not path:
+                    return f"Ali has no {args['document']} for this posting"
+                result = wd.upload(page, args["field_id"], str(path))
+                if result.startswith("ok"):
+                    self.uploaded.add(args["document"])
+                return result
             if name == "press_add":
                 return wd.press_add(page, args["button_id"]) + "\n" + compact(wd.read_page(page))
             if name == "read_page":

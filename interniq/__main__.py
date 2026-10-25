@@ -65,6 +65,20 @@ def write(*posting_ids: str) -> None:
         print(f"  files: {s['folder']}")
 
 
+def screen() -> None:
+    """Decide apply / skip / ask for every new posting."""
+    from interniq import screener
+
+    print("Screening new postings...")
+    results = screener.screen_new()
+    counts = {}
+    for r in results:
+        counts[r["decision"]] = counts.get(r["decision"], 0) + 1
+    summary = "Screening done: " + (", ".join(f"{n} {d}" for d, n in counts.items()) or "nothing new")
+    print(summary)
+    asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", summary))
+
+
 def bot() -> None:
     """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
     discord_bot.run()
@@ -74,6 +88,7 @@ COMMANDS = {
     "ping": ping,
     "login": login,
     "crawl": crawl,
+    "screen": screen,
     "write": write,
     "bot": bot,
 }

@@ -38,6 +38,24 @@ CREATE TABLE IF NOT EXISTS postings (
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL
 );
+
+-- One row per screened posting. Ali's answers become examples for the next screening.
+CREATE TABLE IF NOT EXISTS decisions (
+    posting_id      INTEGER PRIMARY KEY REFERENCES postings(id),
+    agent_decision  TEXT NOT NULL,  -- apply, skip, ask, closed, applied
+    reason          TEXT,
+    flags           TEXT,           -- JSON list, e.g. ["borderline"]
+    form_term       TEXT,           -- term to pick if a form forces a choice
+    model           TEXT,
+    ali_decision    TEXT,           -- apply or skip, from the Discord card
+    screened_at     TEXT NOT NULL,
+    decided_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 POSTING_COLUMNS = [
@@ -126,4 +144,64 @@ def status_summary(conn) -> dict:
         "site": grouped("site"),
         "link_status": grouped("link_status"),
         "last_crawl": last_crawl,
+    }
+
+
+def postings_with_status(conn, status: str) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM postings WHERE status = ? ORDER BY deadline", (status,)).fetchall()
+
+
+def save_decision(conn, posting_id: int, decision: dict) -> None:
+    """Store the screener's decision. Keeps any answer Ali already gave."""
+    with conn:
+        conn.execute(
+            """INSERT INTO decisions (posting_id, agent_decision, reason, flags, form_term, model, screened_at)
+               VALUES (:id, :decision, :reason, :flags, :form_term, :model, :now)
+               ON CONFLICT(posting_id) DO UPDATE SET agent_decision = :decision, reason = :reason,
+                   flags = :flags, form_term = :form_term, model = :model, screened_at = :now""",
+            {"id": posting_id, "now": now(), "decision": decision["decision"], "reason": decision.get("reason"),
+             "flags": json.dumps(decision.get("flags", [])), "form_term": decision.get("form_term"),
+             "model": decision.get("model")},
+        )
+        conn.execute("UPDATE postings SET status = ? WHERE id = ?", (decision["decision"], posting_id))
+
+
+def set_ali_decision(conn, posting_id: int, choice: str) -> None:
+    """Ali's answer from Discord wins over the screener's."""
+    with conn:
+        conn.execute("UPDATE decisions SET ali_decision = ?, decided_at = ? WHERE posting_id = ?",
+                     (choice, now(), posting_id))
+        conn.execute("UPDATE postings SET status = ? WHERE id = ?", (choice, posting_id))
+
+
+def ali_examples(conn, limit: int = 40) -> list[sqlite3.Row]:
+    """Ali's most recent answers, used as examples in the screening prompt."""
+    return conn.execute(
+        """SELECT p.org, p.title, d.agent_decision, d.ali_decision, d.reason FROM decisions d
+           JOIN postings p ON p.id = d.posting_id WHERE d.ali_decision IS NOT NULL
+           ORDER BY d.decided_at DESC LIMIT ?""", (limit,)
+    ).fetchall()
+
+
+def get_setting(conn, key: str, default: str) -> str:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn, key: str, value: str) -> None:
+    with conn:
+        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+                     (key, value, value))
+
+
+def agreement(conn) -> dict:
+    """How often Ali agreed with the screener, overall and on skips."""
+    rows = conn.execute(
+        "SELECT agent_decision, ali_decision FROM decisions WHERE ali_decision IS NOT NULL"
+    ).fetchall()
+    skips = [r for r in rows if r["agent_decision"] == "skip"]
+    return {
+        "reviewed": len(rows),
+        "skips_reviewed": len(skips),
+        "skips_agreed": sum(r["ali_decision"] == "skip" for r in skips),
     }

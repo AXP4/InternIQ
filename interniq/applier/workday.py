@@ -138,8 +138,13 @@ def current_step(page: Page) -> str:
 
 
 def password_slots() -> list[tuple[int, str]]:
-    return [(n, os.getenv(f"SITE_PASSWORD_{n}", "").strip()) for n in (1, 2, 3)
-            if os.getenv(f"SITE_PASSWORD_{n}", "").strip()]
+    """SITE_PASSWORD_1, _2, ... from .env, as many as are set (values are never printed)."""
+    slots = []
+    for n in range(1, 10):
+        value = os.getenv(f"SITE_PASSWORD_{n}", "").strip()
+        if value:
+            slots.append((n, value))
+    return slots
 
 
 def sign_in(page: Page) -> None:

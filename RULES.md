@@ -28,6 +28,15 @@ layout, PCB, silicon validation), mechanical or civil design.
 - A required document or question is unusual.
 - **Learning mode is on:** ask before every skip.
 
+### When in doubt, apply
+- A wrong apply costs Ali little; a wrong skip can lose him a job. When unsure between apply
+  and skip, choose apply (flagged `borderline`) or ask. Skip only roles that are clearly not
+  software.
+- While learning mode is on, Ali reviews every skip on Discord. Those reviews are the
+  screener's answer key: the goal is that Ali agrees with at least 90% of skips.
+- Postings Ali already applied to on Elevate ("Expressed Intention to Apply") are marked
+  applied and not screened.
+
 ### Never skip because of
 - Duration. Any length is fine: 4, 8, 12, or 16 months.
 - Location. Ali will move anywhere, in Canada or abroad. Flag international roles

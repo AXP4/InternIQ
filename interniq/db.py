@@ -289,3 +289,8 @@ def mark_submitted(conn, posting_id: int) -> None:
         conn.execute("UPDATE applications SET state = 'submitted', submitted_at = ? WHERE posting_id = ?",
                      (now(), posting_id))
         conn.execute("UPDATE postings SET status = 'submitted' WHERE id = ?", (posting_id,))
+
+
+def set_elevate_status(conn, posting_id: int, status: str) -> None:
+    with conn:
+        conn.execute("UPDATE postings SET elevate_status = ? WHERE id = ?", (status, posting_id))

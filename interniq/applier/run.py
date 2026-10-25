@@ -11,6 +11,7 @@ import time
 from interniq import browser, db, discord_bot
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
+from interniq.elevate import intent
 from interniq.writer import package
 
 MAX_PAGES = 12
@@ -77,6 +78,12 @@ def run(posting_id: int, job_url: str | None = None, dry: bool = False) -> None:
                 wd.sign_in(page)
             filler = Filler(page, wd.SITE, posting, docs, decision["form_term"] if decision else None)
             fill_until_review(page, filler)
+            expected = {"resume"} | filler.uploaded
+            if package.load_summary(posting_id).get("cover_letter"):
+                expected.add("cover_letter")
+            expected_names = sorted(docs[d].name for d in expected if d in docs)
+            missing = wd.files_on_review(page, expected_names)
+            print(f"  files on Review: expected {expected_names}, missing {missing or 'none'}")
             page.screenshot(path=str(shot), full_page=True)
             (folder / shot.with_suffix(".txt").name).write_text(page.locator("body").inner_text(), encoding="utf-8")
             print(f"  reached Review; screenshot saved to {shot}")
@@ -85,7 +92,8 @@ def run(posting_id: int, job_url: str | None = None, dry: bool = False) -> None:
                                               f"⛔ Stopped on **{label}** (`{posting_id}`): {e}"))
             raise
 
-        notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title}
+        notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
+                 "files_expected": expected_names, "files_missing": missing}
         if dry:
             card = discord_bot.Card(
                 f"🧪 **Dry run reached Review** for {label}\n{url}\n"
@@ -127,6 +135,10 @@ def run(posting_id: int, job_url: str | None = None, dry: bool = False) -> None:
                 if confirmed:
                     db.mark_submitted(conn, posting_id)
                     message = f"📨 **Submitted** {label} (`{posting_id}`)."
+                    try:
+                        message += f"\nElevate 'I intend to apply': {intent.express_intent(context, posting_id)}"
+                    except Exception as e:  # never let this hide a successful submit
+                        message += f"\n⚠️ Elevate 'I intend to apply' failed ({e}); click it by hand."
                 else:
                     message = (f"⚠️ Clicked Submit on {label} (`{posting_id}`) but didn't see a confirmation. "
                                "Check the screenshot and your email.")

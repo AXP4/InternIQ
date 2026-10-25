@@ -234,3 +234,142 @@ def is_review(page: Page) -> bool:
         return True
     button = auto(page, "bottom-navigation-next-button")
     return bool(button.count() and re.search(r"^\s*submit\s*$", button.first.inner_text(), re.I))
+
+
+# ---------- actions (each one verifies the value stuck) ----------
+
+def words(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9+]+", (text or "").lower()))
+
+
+def best_option(options: list[str], wanted: str) -> str | None:
+    """Exact match first, then an option containing the wanted text, then the reverse."""
+    w = words(wanted)
+    for test in (lambda o: words(o) == w, lambda o: w and w in words(o), lambda o: words(o) and words(o) in w):
+        hit = next((o for o in options if test(o)), None)
+        if hit:
+            return hit
+    return None
+
+
+def describe(page: Page, field_id: str) -> dict:
+    return next((f for f in page.evaluate(READ_FIELDS_JS) if f["id"] == field_id), {})
+
+
+def listbox_options(page: Page) -> list:
+    """Options of the dropdown that is open right now.
+
+    Workday renders open dropdowns in a popup outside the question containers; selected
+    pills inside a container also use role=option, so those are left out.
+    """
+    return [o for o in page.locator('[role="listbox"]:visible [role="option"]').all()
+            if o.evaluate("e => !e.closest('[data-automation-id^=\"formField-\"]')")]
+
+
+def prompt_options(page: Page) -> list:
+    """Suggestions under a searchable prompt field (not the already selected pills)."""
+    return page.locator('[data-automation-id="promptOption"]:visible').all()
+
+
+def fill_text(page: Page, field_id: str, value: str) -> str:
+    box = field(page, field_id).locator("textarea, input").first
+    box.fill("")
+    box.fill(value)
+    box.press("Tab")
+    got = describe(page, field_id).get("value", "")
+    return "ok" if got.strip() == value.strip() else f"value didn't stick (field shows {got!r})"
+
+
+def select_option(page: Page, field_id: str, value: str) -> str:
+    button = field(page, field_id).locator('button[aria-haspopup="listbox"]').first
+    click(button)
+    page.wait_for_timeout(800)
+    options = listbox_options(page)
+    names = [o.inner_text().strip() for o in options]
+    choice = best_option(names, value)
+    if not choice:
+        page.keyboard.press("Escape")
+        return f"no option matches {value!r}; options are: {names[:60]}"
+    options[names.index(choice)].click()
+    page.wait_for_timeout(800)
+    got = describe(page, field_id).get("value", "")
+    return f"ok (selected {choice!r})" if words(choice) in words(got) else f"selection didn't stick (shows {got!r})"
+
+
+def select_search(page: Page, field_id: str, value: str) -> str:
+    """Searchable prompt fields: type, press Enter, pick the matching suggestion."""
+    box = field(page, field_id).locator("input").first
+    box.click()
+    box.fill(value)
+    box.press("Enter")
+    page.wait_for_timeout(1500)
+    selected = {p.inner_text().strip() for p in field(page, field_id).locator('[data-automation-id="selectedItem"]').all()}
+    options = [o for o in prompt_options(page) if o.inner_text().strip() not in selected]
+    names = [o.inner_text().strip() for o in options]
+    choice = best_option(names, value)
+    if choice:
+        options[names.index(choice)].click()
+        page.wait_for_timeout(1000)
+    elif names:
+        page.keyboard.press("Escape")
+        return f"no suggestion matches {value!r}; suggestions are: {names[:40]}"
+    got = describe(page, field_id).get("value", "")
+    return f"ok (selected {got!r})" if got else "nothing selected"
+
+
+def choose_radio(page: Page, field_id: str, value: str) -> str:
+    box = field(page, field_id)
+    labels = box.locator("label").all()
+    names = [lab.inner_text().strip() for lab in labels]
+    choice = best_option(names, value)
+    if not choice:
+        return f"no choice matches {value!r}; choices are: {names}"
+    labels[names.index(choice)].click()
+    got = describe(page, field_id).get("value", "")
+    return "ok" if words(choice) == words(got) else f"choice didn't stick (shows {got!r})"
+
+
+def set_checkbox(page: Page, field_id: str, checked: bool, option: str | None = None) -> str:
+    """Tick or untick one checkbox; `option` picks one box in a group by its label."""
+    box = field(page, field_id)
+    boxes = box.locator('input[type="checkbox"]').all()
+    names = [box.locator(f'label[for="{b.get_attribute("id")}"]').first.inner_text().strip()
+             if b.get_attribute("id") and box.locator(f'label[for="{b.get_attribute("id")}"]').count() else ""
+             for b in boxes]
+    target = boxes[0]
+    if option:
+        choice = best_option(names, option)
+        if not choice:
+            return f"no checkbox matches {option!r}; options are: {names}"
+        target = boxes[names.index(choice)]
+    if target.is_checked() != checked:
+        target.click(force=True)
+        page.wait_for_timeout(500)
+    return "ok" if target.is_checked() == checked else "checkbox didn't change"
+
+
+def set_date(page: Page, field_id: str, month: str = "", year: str = "", day: str = "") -> str:
+    box = field(page, field_id)
+    for part, value in (("Month", month), ("Day", day), ("Year", year)):
+        section = box.locator(f'[data-automation-id="dateSection{part}-input"]')
+        if value and section.count():
+            section.first.click()
+            section.first.type(str(value))
+    page.keyboard.press("Tab")
+    return f"ok (shows {describe(page, field_id).get('value', '')!r})"
+
+
+def upload(page: Page, field_id: str, path: str) -> str:
+    field(page, field_id).locator('input[type="file"]').first.set_input_files(path)
+    page.wait_for_timeout(4000)
+    got = describe(page, field_id).get("value", "")
+    return "ok" if got else "upload didn't show up"
+
+
+def press_add(page: Page, button_id: str) -> str:
+    button = page.locator(f'[data-iiq-add="{button_id}"]')
+    if not button.count():
+        return "that Add button is gone; read the page again"
+    click(button)
+    page.wait_for_timeout(1500)
+    return "ok, new fields added"

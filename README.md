@@ -33,5 +33,8 @@ python -m interniq screen             # apply / skip / ask for new postings, car
 python -m interniq decide skip <ids>  # answer review cards in bulk (apply, skip, or closed)
 python -m interniq write <id> [ids]   # build resume + cover letter into data/output/<id>/
 python -m interniq propose <id> [ids] # approval cards in Discord (Submit / Fix / Skip)
+python -m interniq dryrun <id> <url>  # fill a decoy job on the same site, stop at Review
+python -m interniq apply <id>         # fill the real application, submit only after approval
+python -m interniq intend <id>        # click "I intend to apply" on Elevate after submitting
 python -m interniq bot                # keep the Discord bot online (!status, !learning, buttons)
 ```

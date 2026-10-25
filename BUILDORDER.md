@@ -98,7 +98,7 @@ with something Ali can run and see working.
   - `!run` and `!pause` drive the daily run, so they move to Phase 8.
   - Tested on two dummy postings from Ali's phone (Submit, Skip, Fix); dummies deleted.
 
-## Phase 6: Applier, first site type
+## Phase 6: Applier, first site type ✅
 - Start with **Workday** (used by AltaGas, Airbus, and many others).
 - Account creation, form reading, the fill loop with tool calls, uploads, stop at
   the review page, screenshot, approval card, submit on ✅.
@@ -107,6 +107,24 @@ with something Ali can run and see working.
   2027 start first; select every term Ali could do when several are allowed).
 - If a site has an optional cover letter upload for a posting that didn't ask for one, ask
   Ali whether to write one.
+- Notes:
+  - ✅ First live application: AltaGas 2027 Engineering Co-op (152491, Workday R7307),
+    submitted by the agent on 2026-10-25 after Ali's Submit tap, with resume, cover letter,
+    and transcript; then "I intend to apply" clicked on Elevate and confirmed.
+  - Dry runs fill a decoy job on the same Workday site (AltaGas R7346) and stop at Review.
+  - Workday quirks learned (saved as site notes too): Apply Manually, never autofill; the
+    hidden `beecatcher` field is a honeypot; Next is `pageFooterNextButton` (or
+    `bottom-navigation-next-button`); a saved draft shows Continue Application; "Something
+    went wrong" after sign in needs one refresh; date inputs sit under a display layer;
+    open dropdown options render outside the question containers.
+  - Every action re-reads its field to confirm the value stuck. A bug found live: the file
+    reader only saw the first file in a multi-file field, so a good cover letter upload
+    looked failed. Fixed, plus a Review page check that every expected file is listed
+    before the approval card is posted.
+  - The job title is read from the application page and must match the posting before
+    anything is filled; the browser stays on Review until Ali decides.
+  - Submitting is gated twice: no submit tool for Claude, and `workday.submit()` refuses
+    unless the database says approved.
 - **Done when:** one real Workday application goes through end to end with Ali approving.
 
 ## Phase 7: More site types

@@ -103,15 +103,30 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   Verification codes: try the Outlook API (Microsoft Graph); if UCalgary blocks it,
   ask Ali on Discord to paste the code.
 - **Form filling loop** (this is the "agent" part):
-  1. Read the current page's form fields (labels, types, options, required flags)
-     from the page's accessibility tree.
-  2. Send them to Claude Sonnet with the answer bank and the posting.
-  3. Claude replies with tool calls: `fill_text`, `select_option`, `check_box`,
-     `upload_file`, `click_next`, `ask_ali`.
-  4. Python executes each call with Playwright, then repeats on the next page.
-- Stops on the final review page. Takes a screenshot. Never clicks Submit by itself.
-- Saves per-site notes (`site_notes` table) such as "Workday: resume autofill
-  overwrites fields, re-check experience section" so it gets better over time.
+  1. The site driver (`workday.py`) reads every visible question on the page: label,
+     kind (text, select, search select, radio, checkbox, date, file), options, required
+     flag, and current value, and tags each with a stable id.
+  2. `filler.py` sends them to Claude Sonnet with RULES.md, profile facts, resume.yaml,
+     the answer bank (`answers.yaml` + `learned_answers.yaml`), and the site notes.
+  3. Claude replies with tool calls: `fill_text`, `select_option`, `select_search`,
+     `choose_radio`, `set_checkbox`, `set_date`, `upload_file`, `press_add`, `read_page`,
+     `ask_ali`, `record_legal`, `record_unsure`, `save_site_note`, `page_done`. There is
+     no submit tool.
+  4. Python runs each call and re-reads the field to confirm the value stuck; mismatches
+     and the real option lists go back to Claude. Then Save and Continue; Workday's
+     error messages go back to Claude (2 retries per page).
+- `ask_ali` posts in `#questions`, waits for his reply, and appends it to
+  `config/learned_answers.yaml` (gitignored) so it's reused.
+- Before filling, the job title on the page must match the posting. At Review: check
+  every expected file is listed, screenshot, post the approval card, and keep the page
+  open until Ali decides. `workday.submit()` refuses unless the application is approved.
+- After a confirmed submit, `elevate/intent.py` clicks "I intend to apply" on Elevate
+  (the only Elevate click that changes anything) and confirms the row shows "Expressed
+  Intention to Apply".
+- Saves per-site notes (`site_notes` table) such as "a saved draft shows Continue
+  Application" so it gets better over time.
+- Commands: `dryrun <id> <url>` (fill a decoy job on the same site, stop at Review),
+  `apply <id>`, `intend <id>`.
 - **Employer Email** postings: draft the email with attachments and send it to Ali for
   approval (send automatically only if Outlook API access works).
 
@@ -147,7 +162,7 @@ SQLite `data/interniq.db` tables:
 - `applications` (posting_id, state pending/fixing/approved/skipped/submitted, files,
   fix_requests, site, account_email, notes, timestamps). Only Ali's Submit sets `approved`.
 - `answers` (question_text, answer, source, last_used): mirror of the answer bank
-- `site_notes` (site, note)
+- `site_notes` (site, note): quirks learned per application system
 
 ## Folder layout
 ```

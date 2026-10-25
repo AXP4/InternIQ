@@ -69,14 +69,41 @@ def screen() -> None:
     """Decide apply / skip / ask for every new posting."""
     from interniq import screener
 
+    from interniq import db
+
     print("Screening new postings...")
     results = screener.screen_new()
     counts = {}
     for r in results:
         counts[r["decision"]] = counts.get(r["decision"], 0) + 1
-    summary = "Screening done: " + (", ".join(f"{n} {d}" for d, n in counts.items()) or "nothing new")
+
+    learning = discord_bot.learning_mode(db.connect())
+    cards = [discord_bot.review_card(r["posting"], r) for r in results
+             if discord_bot.needs_review(r["decision"], learning)]
+    if cards:
+        asyncio.run(discord_bot.send_many("DISCORD_QUESTIONS_CHANNEL_ID", cards))
+    summary = ("Screening done: " + (", ".join(f"{n} {d}" for d, n in counts.items()) or "nothing new")
+               + f". {len(cards)} cards waiting in #questions.")
     print(summary)
     asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", summary))
+
+
+def decide(choice: str = "", *posting_ids: str) -> None:
+    """Save Ali's answer for postings without tapping each card: decide skip 152617 152089"""
+    from interniq import db
+
+    if choice not in ("apply", "skip", "closed") or not posting_ids:
+        raise SystemExit("Usage: python -m interniq decide <apply|skip|closed> <posting id> [more ids]")
+    conn = db.connect()
+    answers = {}
+    for posting_id in map(int, posting_ids):
+        if not conn.execute("SELECT 1 FROM decisions WHERE posting_id = ?", (posting_id,)).fetchone():
+            print(f"  {posting_id}: not screened yet, skipped")
+            continue
+        db.set_ali_decision(conn, posting_id, choice)
+        answers[posting_id] = choice
+    updated = asyncio.run(discord_bot.mark_cards(answers))
+    print(f"Saved {len(answers)} answers ({choice}); updated {updated} cards in #questions.")
 
 
 def bot() -> None:
@@ -89,6 +116,7 @@ COMMANDS = {
     "login": login,
     "crawl": crawl,
     "screen": screen,
+    "decide": decide,
     "write": write,
     "bot": bot,
 }

@@ -37,7 +37,10 @@ offered. If the posting offers one fixed term, that is the answer. Use the posti
 dates, not Elevate's term column, which always says May 2027 to August 2028. Write it like
 "12 months, January 2027 to December 2027"."""
 
-Flag = Literal["borderline", "international", "clearance", "citizenship", "license", "unusual_requirement"]
+# "legal" marks anything Ali must confirm himself on the approval card (RULES.md section 5:
+# export control, Controlled Goods, citizenship, background checks, attestations).
+Flag = Literal["borderline", "international", "clearance", "citizenship", "license", "legal",
+               "unusual_requirement", "verify_link"]
 
 
 class Screening(BaseModel):

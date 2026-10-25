@@ -50,6 +50,8 @@ layout, PCB, silicon validation), mechanical or civil design.
   careers site for the job title first (the match must also be in the posting's city). If
   it's found, update the link and screen normally. If not, flag it "verify manually"
   instead of closed.
+- Postings applied to by Employer Email or Accumulate Online (inside Elevate) get no
+  employer link check: the application doesn't go through that link.
 
 ## 2. Availability and term choice
 - **Ali's window:** January 2027 through August 2028. Never offer availability past

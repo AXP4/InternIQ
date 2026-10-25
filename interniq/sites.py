@@ -52,6 +52,12 @@ DEAD_PHRASES = [
 ]
 
 
+# Postings that are not applied to through the employer link, so the link isn't checked.
+NO_LINK_PROCEDURES = {
+    "Employer Email": "applied by email; link not checked",
+    "Accumulate Online": "applied inside Elevate; link not checked",
+}
+
 # Final URLs that mean the site is down for maintenance (try again later).
 MAINTENANCE_MARKERS = ["maintenance"]
 
@@ -162,6 +168,10 @@ def check_links(context: BrowserContext, conn) -> list[dict]:
     rows = db.unchecked_links(conn)
     print(f"Checking {len(rows)} employer links...")
     for row in rows:
+        if row["procedure"] in NO_LINK_PROCEDURES:
+            db.save_link_check(conn, row["id"], {"site": None, "link_status": "none",
+                                                 "note": NO_LINK_PROCEDURES[row["procedure"]]})
+            continue
         if not row["link"]:
             db.save_link_check(conn, row["id"], {"site": None, "link_status": "none"})
             continue

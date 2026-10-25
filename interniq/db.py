@@ -106,7 +106,7 @@ def touch(conn, posting_id: int, elevate_status: str) -> None:
 def unchecked_links(conn) -> list[sqlite3.Row]:
     """Postings whose link hasn't been checked yet, or was down for maintenance."""
     return conn.execute(
-        "SELECT id, title, org, link FROM postings"
+        "SELECT id, title, org, location, procedure, link FROM postings"
         " WHERE link_checked_at IS NULL OR link_status = 'down' ORDER BY deadline"
     ).fetchall()
 

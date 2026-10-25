@@ -125,7 +125,11 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
 - Commands: `!run`, `!status`, `!pause`, `!learning on|off`. Only messages from
   Ali's server are answered. `python -m interniq bot` keeps the bot online.
 - Built so far: `!status` (posting counts, screener agreement on skips, learning mode,
-  procedures, sites, links), `!learning on|off`, and review cards in `#questions`.
+  procedures, sites, links), `!learning on|off`, review cards in `#questions`, and
+  approval cards in `#approvals` (PDFs attached; Submit sets `approved`, Fix revises the
+  package from Ali's text and posts a new card, Skip records a skip).
+- All buttons carry the posting ID in their custom ID (`decide:...`, `approval:...`), so
+  they keep working after the bot restarts.
 
 ### 7. Scheduler
 - Windows Task Scheduler runs `python -m interniq run` once a day (default 9 PM, set
@@ -140,7 +144,8 @@ SQLite `data/interniq.db` tables:
 - `decisions` (posting_id, agent_decision, reason, flags, form_term, model,
   ali_decision, timestamps): the learning examples and the agreement score
 - `settings` (key, value): runtime switches such as learning mode
-- `applications` (posting_id, files, submitted_at, site, account_email, notes)
+- `applications` (posting_id, state pending/fixing/approved/skipped/submitted, files,
+  fix_requests, site, account_email, notes, timestamps). Only Ali's Submit sets `approved`.
 - `answers` (question_text, answer, source, last_used): mirror of the answer bank
 - `site_notes` (site, note)
 

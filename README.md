@@ -32,5 +32,6 @@ python -m interniq crawl              # save new ENSF postings and check employe
 python -m interniq screen             # apply / skip / ask for new postings, cards in Discord
 python -m interniq decide skip <ids>  # answer review cards in bulk (apply, skip, or closed)
 python -m interniq write <id> [ids]   # build resume + cover letter into data/output/<id>/
+python -m interniq propose <id> [ids] # approval cards in Discord (Submit / Fix / Skip)
 python -m interniq bot                # keep the Discord bot online (!status, !learning, buttons)
 ```

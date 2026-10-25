@@ -81,9 +81,22 @@ with something Ali can run and see working.
   - The screener's output varies a little between runs (Baytex HSE flipped between dry
     run and real run), which is why skips stay reviewed while learning mode is on.
 
-## Phase 5: Discord approval flow
-- Approval cards with buttons, Fix flow, Skip flow, commands.
-- **Done when:** Ali can approve, fix, or skip a dummy application from his phone.
+## Phase 5: Discord approval flow ✅
+- ✅ Approval cards with buttons, Fix flow, Skip flow, commands.
+- ✅ **Done when:** Ali can approve, fix, or skip a dummy application from his phone.
+- Notes:
+  - Cards go to `#approvals` with the PDFs attached: company, role, location, deadline,
+    procedure and site, the form term, legal questions (`legal` flag), other flags,
+    unresolved check problems, earlier fix requests, and the writer's notes (trimmed
+    first to fit Discord's 2000 character limit).
+  - Submit sets the application to `approved` (the gate the applier will require); the
+    actual submission comes in Phase 6. Skip also saves a skip decision for the screener.
+  - Fix opens a text box; the writer revises the previous draft with Ali's request (in a
+    background thread so the bot stays responsive) and posts a new card.
+  - New `applications` table tracks pending, fixing, approved, skipped, submitted.
+  - `python -m interniq propose <ids>` posts approval cards, writing missing packages.
+  - `!run` and `!pause` drive the daily run, so they move to Phase 8.
+  - Tested on two dummy postings from Ali's phone (Submit, Skip, Fix); dummies deleted.
 
 ## Phase 6: Applier, first site type
 - Start with **Workday** (used by AltaGas, Airbus, and many others).
@@ -106,7 +119,7 @@ with something Ali can run and see working.
   handed to Ali.
 
 ## Phase 8: Daily automation
-- Task Scheduler job (daily 9 PM, wake from sleep), `!run` command, crash recovery
+- Task Scheduler job (daily 9 PM, wake from sleep), `!run` and `!pause` commands, crash recovery
   (resume from saved status), log cleanup.
 - **Done when:** a full unattended night run processes new postings and only pings
   Ali for approvals and questions.

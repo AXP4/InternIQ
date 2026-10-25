@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS applications (
     submitted_at    TEXT
 );
 
+-- Quirks learned per application system, fed back to the form filler on every run.
+CREATE TABLE IF NOT EXISTS site_notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    site       TEXT NOT NULL,   -- workday, icims, ...
+    note       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -259,3 +267,13 @@ def add_fix_request(conn, posting_id: int, text: str) -> None:
 
 def get_application(conn, posting_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM applications WHERE posting_id = ?", (posting_id,)).fetchone()
+
+
+def add_site_note(conn, site: str, note: str) -> None:
+    with conn:
+        conn.execute("INSERT OR IGNORE INTO site_notes (site, note, created_at) VALUES (?, ?, ?)",
+                     (site, note, now()))
+
+
+def site_notes(conn, site: str) -> list[str]:
+    return [r["note"] for r in conn.execute("SELECT note FROM site_notes WHERE site = ? ORDER BY id", (site,))]

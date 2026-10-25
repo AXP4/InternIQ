@@ -88,6 +88,52 @@ async def send_many(channel_env: str, cards: list[Card]) -> None:
 async def send(channel_env: str, text: str) -> None:
     await send_many(channel_env, [Card(text)])
 
+
+def call(coro):
+    """Run a Discord coroutine from blocking code (the applier and crawler).
+
+    It runs in its own thread with its own event loop, so it never collides with the
+    event loop Playwright's sync API uses in the main thread.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+async def ask(question: str, timeout_minutes: int = 60) -> str | None:
+    """Post a question in #questions and wait for Ali's answer.
+
+    His answer is a reply to the question, or the next message he sends in the channel.
+    Returns None if nobody answers in time.
+    """
+    token = config.require("DISCORD_BOT_TOKEN")
+    target = config.channel_id("DISCORD_QUESTIONS_CHANNEL_ID")
+    client = discord.Client(intents=discord.Intents.none())
+    answer: str | None = None
+
+    @client.event
+    async def on_ready():
+        nonlocal answer
+        try:
+            channel = await client.fetch_channel(target)
+            asked = await channel.send(f"❓ {question}\n*Reply to this message with your answer.*")
+            for _ in range(timeout_minutes * 6):
+                await asyncio.sleep(10)
+                async for message in channel.history(after=asked, oldest_first=True, limit=20):
+                    if message.author.bot:
+                        continue
+                    replying = message.reference and message.reference.message_id == asked.id
+                    if replying or not message.reference:
+                        answer = message.content.strip()
+                        await message.add_reaction("✅")
+                        return
+        finally:
+            await client.close()
+
+    await client.start(token)
+    return answer
+
 # ---------- review cards ----------
 
 class DecideButton(discord.ui.DynamicItem[discord.ui.Button], template=r"decide:(?P<choice>apply|skip):(?P<pid>\d+)"):

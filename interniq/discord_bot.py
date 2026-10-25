@@ -14,6 +14,7 @@ from datetime import datetime
 import discord
 
 from interniq import config, db
+from interniq.elevate import clean_title
 
 
 def decision_view(posting_id: int) -> discord.ui.View:
@@ -128,7 +129,7 @@ HEADLINES = {"skip": "Skip this one?", "ask": "Apply to this one?", "closed": "L
 
 def review_card(posting: dict, decision: dict) -> tuple[str, int]:
     """Card text and the posting ID its Apply / Skip buttons belong to."""
-    title = re.sub(r"\s*-\s*(ALL|EN[A-Z]{2}(-AOS)?)(\s+\(?EN[A-Z]{2}(-AOS)?\)?)*\s*$", "", posting["title"]).strip()
+    title = clean_title(posting["title"])
     due = datetime.fromisoformat(posting["deadline"]) if posting.get("deadline") else None
     deadline = f"{due:%b} {due.day}" if due else "no deadline"
     flags = json.loads(decision["flags"]) if isinstance(decision.get("flags"), str) else decision.get("flags") or []

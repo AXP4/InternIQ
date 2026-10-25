@@ -112,11 +112,13 @@ def unchecked_links(conn) -> list[sqlite3.Row]:
 
 
 def save_link_check(conn, posting_id: int, result: dict) -> None:
+    """Store a link check. A job found at a new URL replaces the old link."""
     with conn:
         conn.execute(
-            "UPDATE postings SET site = ?, link_status = ?, link_note = ?, link_final_url = ?, link_checked_at = ?"
-            " WHERE id = ?",
-            (result["site"], result["link_status"], result.get("note"), result.get("final_url"), now(), posting_id),
+            "UPDATE postings SET site = ?, link_status = ?, link_note = ?, link_final_url = ?, link_checked_at = ?,"
+            " link = COALESCE(?, link) WHERE id = ?",
+            (result["site"], result["link_status"], result.get("note"), result.get("final_url"), now(),
+             result.get("new_link"), posting_id),
         )
 
 

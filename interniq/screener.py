@@ -96,7 +96,10 @@ def decide(client: anthropic.Anthropic | None, posting: dict, examples: list, mo
     if posting.get("link_status") == "dead":
         return {"decision": "closed", "reason": f"Employer link looks dead ({posting.get('link_note')}).",
                 "model": None}
-    return screen_one(client, posting, examples, model)
+    decision = screen_one(client, posting, examples, model)
+    if posting.get("link_status") == "verify" and "verify_link" not in decision["flags"]:
+        decision["flags"].append("verify_link")
+    return decision
 
 
 def screen_new(model: str | None = None) -> list[dict]:

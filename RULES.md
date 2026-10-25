@@ -44,8 +44,12 @@ layout, PCB, silicon validation), mechanical or civil design.
 - How many roles the same company has. Apply to every role that fits, with no
   per-company limit.
 - A start date of January or May 2027. Both are fine.
-- Closed roles: if the employer link is dead or the posting says closed, mark `closed`
-  and tell Ali.
+- Closed roles: mark `closed` (and tell Ali) only on a 404 or a page that clearly says the
+  job is closed or no longer accepting applications.
+- A redirect to a job search page is not proof the job is closed. Search the company's
+  careers site for the job title first (the match must also be in the posting's city). If
+  it's found, update the link and screen normally. If not, flag it "verify manually"
+  instead of closed.
 
 ## 2. Availability and term choice
 - **Ali's window:** January 2027 through August 2028. Never offer availability past

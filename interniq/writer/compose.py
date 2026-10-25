@@ -79,7 +79,8 @@ def system_prompt() -> list[dict]:
     return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
 
-def posting_message(posting: dict, letter_wanted: bool) -> str:
+def posting_message(posting: dict, letter_wanted: bool, previous: dict | None = None,
+                    feedback: str | None = None) -> str:
     fields = {
         k: posting.get(k)
         for k in ["id", "title", "org", "division", "location", "term", "term_start", "duration",
@@ -91,6 +92,15 @@ def posting_message(posting: dict, letter_wanted: bool) -> str:
         "This posting does not ask for a cover letter, so don't write one: return an empty "
         "paragraphs list. Still choose the resume focus, and fill the other fields."
     )
+    if previous and feedback:
+        task = (
+            f"<previous_draft>\n{json.dumps(previous, indent=1, ensure_ascii=False)}\n</previous_draft>\n\n"
+            f"Ali reviewed the previous draft and asked for this change:\n<ali_feedback>\n{feedback}\n"
+            "</ali_feedback>\n\nReturn the full revised package. Change what he asked for and keep "
+            "everything else from the previous draft unless the change requires it. If his request "
+            "would break a rule or claim something not in profile_facts.md, follow the rules and "
+            "explain in notes_for_ali."
+        )
     return (
         f"Today's date is {today:%B} {today.day}, {today:%Y}.\n\n"
         f"<posting>\n{json.dumps(fields, indent=1, ensure_ascii=False)}\n</posting>\n\n{task}"
@@ -100,10 +110,11 @@ def posting_message(posting: dict, letter_wanted: bool) -> str:
 class Composer:
     """One conversation per posting, so fix requests keep the earlier draft in context."""
 
-    def __init__(self, posting: dict, letter_wanted: bool = True):
+    def __init__(self, posting: dict, letter_wanted: bool = True, previous: dict | None = None,
+                 feedback: str | None = None):
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         self.system = system_prompt()
-        self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted)}]
+        self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted, previous, feedback)}]
 
     def _ask(self) -> Package:
         response = self.client.beta.messages.parse(

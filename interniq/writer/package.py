@@ -61,15 +61,25 @@ def render(package: Package, out_dir, data: dict, with_letter: bool) -> list[str
     return problems
 
 
-def write(posting_id: int) -> dict:
-    """Draft, check, fix, and render. Returns a summary for the terminal."""
+def load_summary(posting_id: int) -> dict | None:
+    """The package.json written for a posting, or None if there's no package yet."""
+    path = OUTPUT_DIR / str(posting_id) / "package.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def write(posting_id: int, feedback: str | None = None) -> dict:
+    """Draft, check, fix, and render. Returns a summary for the terminal.
+
+    With `feedback` (Ali's Fix request from Discord), the previous draft is revised.
+    """
     posting = load_posting(posting_id)
     out_dir = OUTPUT_DIR / str(posting_id)
     out_dir.mkdir(parents=True, exist_ok=True)
     data = resume.load()
 
     with_letter = letter_wanted(posting)
-    composer = Composer(posting, with_letter)
+    earlier = load_summary(posting_id) if feedback else None
+    composer = Composer(posting, with_letter, earlier["package"] if earlier else None, feedback)
 
     def problems_in(package: Package) -> list[str]:
         found = checks.check(package, posting) if with_letter else []
@@ -102,6 +112,8 @@ def write(posting_id: int) -> dict:
         "title": posting["title"],
         "folder": str(out_dir),
         "cover_letter": with_letter,
+        "files": sorted(p.name for p in out_dir.glob("*.pdf")),
+        "feedback": (earlier.get("feedback", []) if earlier else []) + ([feedback] if feedback else []),
         "fix_rounds": fixes,
         "unresolved_problems": problems,
         "package": package.model_dump(),

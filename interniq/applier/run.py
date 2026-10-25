@@ -57,34 +57,49 @@ def run(posting_id: int, job_url: str | None = None, dry: bool = False) -> None:
     decision = conn.execute("SELECT form_term FROM decisions WHERE posting_id = ?", (posting_id,)).fetchone()
     docs = documents(posting_id)
     url = job_url or posting["link"]
-    shot = package.OUTPUT_DIR / str(posting_id) / ("dry_run_review.png" if dry else "review.png")
-    label = f"{posting['org']}, {posting['title']}"
+    folder = package.OUTPUT_DIR / str(posting_id)
+    shot = folder / ("dry_run_review.png" if dry else "review.png")
+    label = f"{posting['org']}, {posting['title']}"  # replaced by the page's own title once it's read
 
     with browser.open_browser() as context:
         page = browser.page_of(context)
         try:
             wd.open_application(page, url)
+            page_title = wd.page_job_title(page)
+            label = f"{posting['org']}, {page_title or posting['title']}"
+            print(f"  page title: {page_title!r}")
+            # Never fill a page for a different job than the posting (a dry run fills a
+            # decoy on purpose, so it only reports the page's title).
+            if not dry and not wd.titles_match(posting["title"], page_title):
+                raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
+                                 "Nothing was filled.")
             if wd.current_step(page) == wd.STEPS[0]:
                 wd.sign_in(page)
             filler = Filler(page, wd.SITE, posting, docs, decision["form_term"] if decision else None)
             fill_until_review(page, filler)
             page.screenshot(path=str(shot), full_page=True)
+            (folder / shot.with_suffix(".txt").name).write_text(page.locator("body").inner_text(), encoding="utf-8")
             print(f"  reached Review; screenshot saved to {shot}")
         except wd.Blocked as e:
             discord_bot.call(discord_bot.send("DISCORD_QUESTIONS_CHANNEL_ID",
                                               f"⛔ Stopped on **{label}** (`{posting_id}`): {e}"))
             raise
 
-        notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name}
+        notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title}
         if dry:
             card = discord_bot.Card(
-                f"🧪 **Dry run reached Review** for {label} using {url}\n"
+                f"🧪 **Dry run reached Review** for {label}\n{url}\n"
                 f"Legal items: {len(filler.legal)} · Unsure: {len(filler.unsure)}\n"
-                + "\n".join(f"• {u}" for u in filler.unsure[:8]),
+                + "\n".join(f"• {u}" for u in filler.unsure[:8])
+                + "\nThe window stays open on Review until you close it. Nothing will be submitted.",
                 files=[shot])
             discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID", [card]))
-            print("  dry run done; closing the window abandons the draft")
             print(json.dumps(notes, indent=1, ensure_ascii=False))
+            print("  dry run done; waiting for Ali to close the window (that abandons the draft)")
+            try:
+                page.wait_for_event("close", timeout=APPROVAL_WAIT_HOURS * 3600 * 1000)
+            except Exception:  # window closed with the whole browser, or the wait ran out
+                pass
             return
 
         discord_bot.propose([posting_id])  # records the pending application

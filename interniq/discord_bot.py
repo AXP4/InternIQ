@@ -256,6 +256,9 @@ def approval_card(posting_id: int) -> Card:
         head.append(f"⚠️ Check: {problem}")
     app = db.get_application(conn, posting_id)
     run_notes = json.loads(app["notes"]) if app and app["notes"] else {}
+    if run_notes.get("page_title"):
+        # The title read from the application page itself, which the run checked against the posting.
+        head[1] = f"**{posting['org']}**, {run_notes['page_title']}"
     for item in run_notes.get("legal", []):
         head.append(f"⚖️ **Confirm:** {item['question']} → **{item['answer']}**")
     for item in run_notes.get("unsure", []):

@@ -15,6 +15,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from interniq import browser, config, db, discord_bot
+from interniq.elevate import clean_title
 
 SITE = "workday"
 STEPS = ["Create Account/Sign In", "My Information", "My Experience", "Application Questions",
@@ -88,6 +89,23 @@ def open_application(page: Page, job_url: str) -> None:
     click(manual)
     page.wait_for_timeout(5000)
     wait_out_bot_check(page, "opening the application")
+
+
+def page_job_title(page: Page) -> str:
+    """The job title Workday shows on the page being filled."""
+    for automation_id in ("jobTitleHeading", "jobPostingHeader"):
+        heading = auto(page, automation_id)
+        if heading.count() and heading.first.inner_text().strip():
+            return heading.first.inner_text().strip()
+    return ""
+
+
+def titles_match(posting_title: str, page_title: str) -> bool:
+    """True when the page is the same job: nearly all words of the posting's title (without
+    Elevate's program codes) appear in the page's title."""
+    wanted = set(words(clean_title(posting_title)).split())
+    have = set(words(page_title).split())
+    return bool(wanted) and len(wanted & have) >= 0.8 * len(wanted)
 
 
 def recover_error_page(page: Page) -> None:

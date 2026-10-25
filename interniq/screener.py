@@ -6,6 +6,7 @@ applied to, and postings whose link is dead, are handled without a model call.
 """
 
 import json
+import re
 from typing import Literal
 
 import anthropic
@@ -41,6 +42,21 @@ dates, not Elevate's term column, which always says May 2027 to August 2028. Wri
 # export control, Controlled Goods, citizenship, background checks, attestations).
 Flag = Literal["borderline", "international", "clearance", "citizenship", "license", "legal",
                "unusual_requirement", "verify_link"]
+
+
+# "international" means outside Canada only (RULES.md). Locations that are clearly in Canada.
+PROVINCE_CODES = re.compile(r"\b(AB|BC|MB|SK|ON|QC|NS|NB|NL|PE|PEI|YT|NT|NU)\b")  # case sensitive
+CANADIAN_NAMES = re.compile(
+    r"\b(canada|alberta|british columbia|manitoba|saskatchewan|ontario|quebec|nova scotia|"
+    r"new brunswick|newfoundland|prince edward island|yukon|northwest territories|nunavut|"
+    r"calgary|edmonton|vancouver|toronto|ottawa|montreal|winnipeg|markham|waterloo|halifax|"
+    r"victoria|regina|saskatoon|medicine hat)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def in_canada(location: str | None) -> bool:
+    return bool(location and (PROVINCE_CODES.search(location) or CANADIAN_NAMES.search(location)))
 
 
 class Screening(BaseModel):
@@ -97,6 +113,8 @@ def decide(client: anthropic.Anthropic | None, posting: dict, examples: list, mo
         return {"decision": "closed", "reason": f"Employer link looks dead ({posting.get('link_note')}).",
                 "model": None}
     decision = screen_one(client, posting, examples, model)
+    if "international" in decision["flags"] and in_canada(posting.get("location")):
+        decision["flags"].remove("international")
     if posting.get("link_status") == "verify" and "verify_link" not in decision["flags"]:
         decision["flags"].append("verify_link")
     return decision

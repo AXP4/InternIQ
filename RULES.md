@@ -41,6 +41,8 @@ layout, PCB, silicon validation), mechanical or civil design.
 - Duration. Any length is fine: 4, 8, 12, or 16 months.
 - Location. Ali will move anywhere, in Canada or abroad. Flag international roles
   (visa needed; Ali is a Canadian citizen and can use International Experience Canada).
+  "International" means outside Canada only: any Canadian city or province (Markham,
+  Vancouver, Winnipeg, ...) is never international.
 - How many roles the same company has. Apply to every role that fits, with no
   per-company limit.
 - A start date of January or May 2027. Both are fine.

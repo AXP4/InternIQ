@@ -49,19 +49,28 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
 
 ### 2b. Link checker (`interniq/sites.py`)
 - Opens each new employer link once. Records the site type (from the URL, the final
-  URL, then the page HTML), `link_status` (ok, dead, down, error, none) and
-  `link_note` (why: HTTP 404, redirected to the job search page, "no longer
-  accepting", site maintenance). "down" links are retried next crawl.
+  URL, then the page HTML), `link_status` (ok, dead, verify, down, error, none) and
+  `link_note` (why: HTTP 404, "no longer accepting", site maintenance, job moved).
+  "down" links are retried next crawl.
+- Dead only on a 404 or a page that says the job is gone. A redirect to a search page
+  triggers a search of the careers site by title; a match in the posting's city replaces
+  the link, otherwise the status is "verify" (check manually).
+- Employer Email and Accumulate Online postings are not checked (status "none").
 - Shared with the applier later, which uses the same site detection.
 
 ### 3. Screener (`interniq/screener.py`)
-- Sends the posting text plus `RULES.md` plus Ali's past decisions
-  (`decisions` table, used as examples) to Claude Haiku.
-- Returns structured JSON: `{decision: apply|skip|ask, reason, resume_profile,
-  term_choice, flags: [...] }`.
-- **Learning mode** (on at first): every `skip` is sent to Ali on Discord to confirm.
-  His answer is saved to `decisions` and fed back as an example next time. Ali can turn
-  learning mode off with a Discord command once he trusts it.
+- Sends the posting plus `RULES.md` and `config/profile_facts.md` (cached system prompt)
+  and Ali's latest Discord answers (`decisions` table, as examples) to Claude Haiku 5.5.
+- Returns structured JSON: `{decision: apply|skip|ask, reason, flags: [...], form_term}`.
+  Leans toward apply: a wrong apply costs little, a wrong skip can lose a job.
+- Handled without a model call: postings Ali already applied to on Elevate (`applied`)
+  and postings with a dead link (`closed`). A `verify` link adds the `verify_link` flag.
+- **Learning mode** (on at first): every `skip`, every `ask`, and every dead link gets a
+  card in `#questions` with Apply / Skip buttons. Ali's answer is saved to `decisions`,
+  updates the posting's status, and becomes an example next time. `!learning off` stops
+  skip cards (asks and dead links still come).
+- `python -m interniq screen` screens every `new` posting; `python -m interniq decide`
+  saves answers in bulk and updates the cards.
 
 ### 4. Writer (`interniq/writer/`)
 - **Resume (`resume.py`):** built from structured data (`config/resume.yaml`) into a PDF
@@ -115,8 +124,8 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   saved to the answer bank so they are never asked twice.
 - Commands: `!run`, `!status`, `!pause`, `!learning on|off`. Only messages from
   Ali's server are answered. `python -m interniq bot` keeps the bot online.
-- Built so far: `!status` (posting counts by status, procedure, site, link status,
-  deadlines in the next 7 days).
+- Built so far: `!status` (posting counts, screener agreement on skips, learning mode,
+  procedures, sites, links), `!learning on|off`, and review cards in `#questions`.
 
 ### 7. Scheduler
 - Windows Task Scheduler runs `python -m interniq run` once a day (default 9 PM, set
@@ -128,7 +137,9 @@ SQLite `data/interniq.db` tables:
   deadline, procedure, link, email, materials, additional_info, description,
   qualifications, fields, raw_text, elevate_status, site, link_status, link_note,
   status, timestamps). Schema lives in `interniq/db.py`.
-- `decisions` (posting_id, agent_decision, ali_decision, reason): the learning examples
+- `decisions` (posting_id, agent_decision, reason, flags, form_term, model,
+  ali_decision, timestamps): the learning examples and the agreement score
+- `settings` (key, value): runtime switches such as learning mode
 - `applications` (posting_id, files, submitted_at, site, account_email, notes)
 - `answers` (question_text, answer, source, last_used): mirror of the answer bank
 - `site_notes` (site, note)

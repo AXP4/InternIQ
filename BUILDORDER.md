@@ -57,12 +57,29 @@ with something Ali can run and see working.
     in the posting's own fields and description.
   - `python -m interniq write <id> ...` builds a package into `data/output/<id>/`.
 
-## Phase 4: Screener with learning mode
-- Screening prompt, JSON output, decisions table.
-- Discord question cards for every skip (learning mode) and every "ask".
-- Build a test set from Ali's past decisions (the postings already screened by hand:
-  applies and skips) and measure agreement, like CourseIQ's answer key.
-- **Done when:** agreement on the test set is 90% or higher, and Discord questions work.
+## Phase 4: Screener with learning mode ✅
+- ✅ Screening prompt, JSON output, decisions table.
+- ✅ Discord question cards for every skip (learning mode) and every "ask".
+- ✅ Measure agreement with Ali (see notes: his skip reviews became the answer key).
+- ✅ **Done when:** agreement is 90% or higher, and Discord questions work.
+- Notes:
+  - Deviation: instead of a hand labeled test set, Ali's reviews of the screener's skips
+    are the answer key, because a wrong apply costs little and every skip is reviewed
+    anyway. First run: Ali agreed with 11 of 11 skips (100%); he also decided the 5 asks
+    (4 skip, 1 apply) and the dead links.
+  - Model: compared Haiku 4.5 and Haiku 5.5 on all postings. Haiku 5.5 followed the
+    rules better (skips only clear non software roles, doesn't ask over missing skills)
+    and is 10x cheaper, so screening uses `claude-haiku-5-5`.
+  - The screener also reads `profile_facts.md` (license, citizenship) and returns the
+    form term choice and flags (`borderline`, `legal`, `verify_link`, ...).
+  - Buttons carry the posting ID in their custom ID, so cards work after a bot restart.
+    `python -m interniq decide <apply|skip|closed> <ids>` saves answers in bulk and
+    updates the matching cards.
+  - Link check fixes found while reviewing: a redirect to a search page now triggers a
+    careers site search (title plus city) and becomes "verify" instead of dead; Employer
+    Email and Accumulate Online postings get no link check.
+  - The screener's output varies a little between runs (Baytex HSE flipped between dry
+    run and real run), which is why skips stay reviewed while learning mode is on.
 
 ## Phase 5: Discord approval flow
 - Approval cards with buttons, Fix flow, Skip flow, commands.

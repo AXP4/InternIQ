@@ -29,6 +29,8 @@ Italic, BoldItalic) from Google Fonts and Roboto (Regular, Bold, Italic, BoldIta
 ```
 python -m interniq login              # log into Elevate once in the agent's browser
 python -m interniq crawl              # save new ENSF postings and check employer links
+python -m interniq screen             # apply / skip / ask for new postings, cards in Discord
+python -m interniq decide skip <ids>  # answer review cards in bulk (apply, skip, or closed)
 python -m interniq write <id> [ids]   # build resume + cover letter into data/output/<id>/
-python -m interniq bot                # keep the Discord bot online (!status)
+python -m interniq bot                # keep the Discord bot online (!status, !learning, buttons)
 ```

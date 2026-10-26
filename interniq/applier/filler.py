@@ -130,6 +130,8 @@ class Filler:
         self.attempted: set[str] = set()  # documents Claude tried to upload (found a slot for)
         self.screenshot_dir = None  # set by the run: where step screenshots go
         self.step_shots: list = []
+        self.step_answers: list[dict] = []  # each filled step's questions and final values
+        self.touched: dict[str, str] = {}  # field id -> how it got its value (filled, asked Ali)
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         notes = db.site_notes(db.connect(), site)
         text = "\n\n".join([
@@ -205,6 +207,7 @@ class Filler:
                 f"Page now:\n{compact(snapshot)}")
         if problems:
             text += "\n\nThe site refused to continue because of these errors; fix them:\n- " + "\n- ".join(problems)
+        self.asked_this_page = False
         messages = [{"role": "user", "content": text}]
         for _ in range(MAX_TURNS):
             response = self.client.beta.messages.create(
@@ -230,6 +233,11 @@ class Filler:
                     results.append({"type": "tool_result", "tool_use_id": call.id, "content": "ok"})
                     continue
                 result = self.run_tool(call.name, call.input)
+                if "field_id" in call.input and result.startswith("ok"):
+                    self.touched[call.input["field_id"]] = (
+                        "from your answer to a question" if self.asked_this_page else "filled by the agent")
+                if call.name == "ask_ali":
+                    self.asked_this_page = True
                 print(f"    {call.name}({json.dumps(call.input, ensure_ascii=False)[:90]}) -> {result[:90]}")
                 results.append({"type": "tool_result", "tool_use_id": call.id, "content": result,
                                 "is_error": result.startswith(("error", "no ", "value didn't", "selection didn't",

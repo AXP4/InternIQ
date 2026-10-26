@@ -62,13 +62,39 @@ def revisit_skipped(page, filler: Filler, driver, visited: set[str]) -> None:
 
 
 def snap_step(page, filler: Filler, name: str) -> None:
-    """Screenshot a step right after it's filled. Sites without a review page (iCIMS) send
-    the application from the last step, so these are Ali's only full view of his answers."""
+    """Screenshot a step right after it's filled, and read back every question's final
+    value. Sites without a review page (iCIMS) send the application from the last step,
+    so these are Ali's only full view of his answers."""
     folder = filler.screenshot_dir
-    if folder:
-        path = folder / f"step{len(filler.step_shots) + 1}_{re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')}.png"
-        page.screenshot(path=str(path), full_page=True)
-        filler.step_shots.append(path)
+    if not folder:
+        return
+    number = len(filler.step_shots) + 1
+    path = folder / f"step{number}_{re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')}.png"
+    page.screenshot(path=str(path), full_page=True)
+    filler.step_shots.append(path)
+    filler.step_answers.append({"step": name, "fields": filler.driver.read_page(page)["fields"]})
+
+
+def answers_report(filler: Filler) -> str:
+    """Every question of every step with its final value, and who put it there."""
+    lines, empty_required = [], []
+    for number, step in enumerate(filler.step_answers, start=1):
+        lines.append(f"\nSTEP {number}  {step['step']}")
+        for f in step["fields"]:
+            value = (f.get("value") or "").strip()
+            label = re.sub(r"\s+", " ", f.get("label") or f.get("name") or "")[:110]
+            empty = not value or value.lower().startswith(("— make", "-- make", "make a selection", "select one"))
+            how = filler.touched.get(f["id"], "left empty" if empty else "kept what was already there")
+            if f["kind"] == "file":
+                value = value[:80]
+            mark = "⚠️ " if f.get("required") and empty else "   "
+            if mark.strip():
+                empty_required.append(f"{step['step']}: {label}")
+            lines.append(f"{mark}{label}: {value or '(empty)'}   [{how}]")
+    head = ["ANSWERS AS SUBMITTED (read back from the form after filling)"]
+    if empty_required:
+        head.append("⚠️ REQUIRED QUESTIONS STILL EMPTY: " + "; ".join(empty_required))
+    return "\n".join(head + lines) + "\n"
 
 
 def fill_until_review(page, filler: Filler, driver) -> None:
@@ -168,13 +194,16 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
              "files_expected": expected_names, "files_missing": missing, "files_no_slot": no_slot,
              "step_shots": [p.name for p in filler.step_shots]}
+    report = folder / ("dry_run_answers.txt" if dry else "answers.txt")
+    report.write_text(answers_report(filler), encoding="utf-8")
+    notes["answers_report"] = report.name
     if dry:
         card = discord_bot.Card(
             f"🧪 **Dry run reached Review** for {label}\n{url}\n"
             f"Legal items: {len(filler.legal)} · Unsure: {len(filler.unsure)}\n"
             + "\n".join(f"• {u}" for u in filler.unsure[:8])
             + "\nThe window stays open on Review until you close it. Nothing will be submitted.",
-            files=[shot])
+            files=[report] + filler.step_shots[:9])
         discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID", [card]))
         print(json.dumps(notes, indent=1, ensure_ascii=False))
         print("  dry run done; waiting for Ali to close the window (that abandons the draft)")

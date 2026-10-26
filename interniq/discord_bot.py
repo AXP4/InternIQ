@@ -282,6 +282,10 @@ def approval_card(posting_id: int) -> Card:
     shots = [folder / name for name in run_notes.get("step_shots", []) if (folder / name).exists()]
     if not shots and run_notes.get("screenshot") and (folder / run_notes["screenshot"]).exists():
         shots = [folder / run_notes["screenshot"]]
+    report = folder / run_notes["answers_report"] if run_notes.get("answers_report") else None
+    if report and report.exists():
+        head.append(f"📝 **{report.name}** lists every question and its final value. Open it first.")
+        files = [report] + files
     files = (files + shots)[:10]
     tail = [f"Attached: {', '.join(p.name for p in files)}"]
     if posting.get("link"):

@@ -283,27 +283,28 @@ def sign_in(page: Page, slot: int) -> None:
     print(f"  signed in to {host()}")
 
 
-def fill_new_account_password(page: Page) -> None:
-    """The Personal Information step creates the account: both password boxes get slot 1."""
+def fill_new_account_password(page: Page) -> bool:
+    """The Personal Information step creates the account: both password boxes get slot 1.
+    Returns True when it filled them (the slot is remembered once the step is left)."""
     if page.locator('input[name="username"]:visible').count():
-        return  # step 1's sign-in box for existing accounts, not a new account
+        return False  # step 1's sign-in box for existing accounts, not a new account
     boxes = page.locator('input[type="password"]:visible').all()
     if not boxes or all(b.input_value() for b in boxes):
-        return
+        return False
     password = dict(password_slots()).get(NEW_ACCOUNT_SLOT)
     if not password:
         raise Blocked(f"SITE_PASSWORD_{NEW_ACCOUNT_SLOT} is empty")
     for b in boxes:
         b.fill(password)
-    db.set_setting(db.connect(), f"password_slot:{host()}", str(NEW_ACCOUNT_SLOT))
     print(f"  new account password: slot {NEW_ACCOUNT_SLOT}")
+    return True
 
 
 def next_page(page: Page) -> str:
     if is_review(page):
         raise Blocked("Refusing to click on the final step; only an approved submit may")
     before = current_step(page)
-    fill_new_account_password(page)
+    new_account = fill_new_account_password(page)
     candidates = [b for b in buttons(page) if NEXT_TEXT.match(button_text(b))]
     if not candidates:
         raise Blocked(f"No Next button on {before!r}")
@@ -311,7 +312,10 @@ def next_page(page: Page) -> str:
     page.wait_for_load_state()
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, f"leaving {before}")
-    return current_step(page)
+    after = current_step(page)
+    if new_account and after != before:  # the account now exists
+        db.set_setting(db.connect(), f"password_slot:{host()}", str(NEW_ACCOUNT_SLOT))
+    return after
 
 
 def is_review(page: Page) -> bool:

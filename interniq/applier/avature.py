@@ -17,7 +17,7 @@ from interniq.applier.workday import Blocked, best_option, password_slots, wait_
 
 SITE = "avature"
 SHOWS_FILES_ON_REVIEW = False  # the EEO step doesn't list the uploaded files
-NEW_ACCOUNT_SLOT = 1
+_new_slot = {"slot": 0}  # the password slot used for a new account in this run
 
 READ_FIELDS_JS = r"""
 () => {
@@ -284,20 +284,33 @@ def sign_in(page: Page, slot: int) -> None:
 
 
 def fill_new_account_password(page: Page) -> bool:
-    """The Personal Information step creates the account: both password boxes get slot 1.
+    """The Personal Information step creates the account: both password boxes get the first strong slot.
     Returns True when it filled them (the slot is remembered once the step is left)."""
     if page.locator('input[name="username"]:visible').count():
         return False  # step 1's sign-in box for existing accounts, not a new account
     boxes = page.locator('input[type="password"]:visible').all()
     if not boxes or all(b.input_value() for b in boxes):
         return False
-    password = dict(password_slots()).get(NEW_ACCOUNT_SLOT)
-    if not password:
-        raise Blocked(f"SITE_PASSWORD_{NEW_ACCOUNT_SLOT} is empty")
+    slot, password = new_account_password()
     for b in boxes:
         b.fill(password)
-    print(f"  new account password: slot {NEW_ACCOUNT_SLOT}")
+    _new_slot["slot"] = slot
+    print(f"  new account password: slot {slot}")
     return True
+
+
+def strong(password: str) -> bool:
+    """EA's rule: 8+ characters, upper and lower case, a number, and a symbol."""
+    return (len(password) >= 8 and all(re.search(p, password) for p in ("[a-z]", "[A-Z]", "[0-9]"))
+            and bool(re.search(r"[^A-Za-z0-9]", password)))
+
+
+def new_account_password() -> tuple[int, str]:
+    """The first SITE_PASSWORD slot that meets the usual strength rules."""
+    for slot, password in password_slots():
+        if strong(password):
+            return slot, password
+    raise Blocked("No SITE_PASSWORD slot meets EA's password rules (8+ chars, upper, lower, number, symbol)")
 
 
 def next_page(page: Page) -> str:
@@ -314,7 +327,7 @@ def next_page(page: Page) -> str:
     wait_out_bot_check(page, f"leaving {before}")
     after = current_step(page)
     if new_account and after != before:  # the account now exists
-        db.set_setting(db.connect(), f"password_slot:{host()}", str(NEW_ACCOUNT_SLOT))
+        db.set_setting(db.connect(), f"password_slot:{host()}", str(_new_slot["slot"]))
     return after
 
 

@@ -1,8 +1,9 @@
 """Clicks "I intend to apply" on Elevate after an application is submitted.
 
-This is the only click InternIQ ever makes on Elevate that changes anything. It runs
-only for postings whose application is recorded as submitted, and it confirms the
-result by reading the posting's row afterwards ("Expressed Intention to Apply").
+Besides applying to "Accumulate Online" postings after Ali approves (`elevate/apply.py`),
+this is the only click InternIQ makes on Elevate that changes anything. It runs only for
+postings whose application is recorded as submitted, and it confirms the result by
+reading the posting's row afterwards ("Expressed Intention to Apply").
 """
 
 import re

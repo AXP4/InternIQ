@@ -14,6 +14,7 @@ from interniq import browser, db, discord_bot
 from interniq.applier import icims
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
+from interniq.elevate import apply as elevate_apply
 from interniq.elevate import intent
 from interniq.writer import package
 
@@ -226,39 +227,107 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
             pass
         return
 
+    print("  posting the approval card; keeping the Review page open until Ali decides")
+    if wait_for_decision(page, conn, posting_id, label, notes) != "approved":
+        return
+    confirmed = driver.submit(page, posting_id)
+    confirm_shot = shot.with_name("submitted.png")
+    page.screenshot(path=str(confirm_shot), full_page=True)
+    if confirmed:
+        db.mark_submitted(conn, posting_id)
+        message = f"📨 **Submitted** {label} (`{posting_id}`).\n" + after_submit(context, conn, posting_id)
+    else:
+        message = (f"⚠️ Clicked Submit on {label} (`{posting_id}`) but didn't see a confirmation. "
+                   "Check the screenshot and your email.")
+    discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID",
+                                           [discord_bot.Card(message, files=[confirm_shot])]))
+    page.wait_for_timeout(5000)
+
+
+def wait_for_decision(page, conn, posting_id: int, label: str, notes: dict) -> str | None:
+    """Post the approval card, then wait for Ali's tap. Returns "approved", or None when
+    he skipped, asked for a fix, or didn't decide in time."""
     discord_bot.propose([posting_id])  # records the pending application
     db.set_application_notes(conn, posting_id, notes)
-    card = discord_bot.approval_card(posting_id)  # now includes the screenshot, legal, and unsure items
+    card = discord_bot.approval_card(posting_id)  # includes the screenshots, legal, and unsure items
     discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card]))
-    print("  approval card posted; keeping the Review page open until Ali decides")
-
     deadline = time.time() + APPROVAL_WAIT_HOURS * 3600
     while time.time() < deadline:
         page.wait_for_timeout(10_000)
         state = db.get_application(conn, posting_id)["state"]
+        if state == "approved":
+            return state
         if state == "skipped":
             print("  Ali skipped it")
-            return
+            return None
         if state == "fixing":
             print("  Ali asked for a fix; moving on (run it again after the fixed package is ready)")
             discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
                                               f"✏️ {label}: run again after the fixed package is ready."))
-            return
-        if state == "approved":
-            confirmed = driver.submit(page, posting_id)
-            confirm_shot = shot.with_name("submitted.png")
-            page.screenshot(path=str(confirm_shot), full_page=True)
-            if confirmed:
-                db.mark_submitted(conn, posting_id)
-                message = f"📨 **Submitted** {label} (`{posting_id}`).\n" + after_submit(context, conn, posting_id)
-            else:
-                message = (f"⚠️ Clicked Submit on {label} (`{posting_id}`) but didn't see a confirmation. "
-                           "Check the screenshot and your email.")
-            discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID",
-                                                   [discord_bot.Card(message, files=[confirm_shot])]))
-            page.wait_for_timeout(5000)
-            return
-    print("  no decision within the wait limit; moving on (the draft stays saved on the site)")
+            return None
+    print("  no decision within the wait limit; moving on")
+    return None
+
+
+def run_elevate(context, page, posting_id: int) -> None:
+    """An "Accumulate Online" posting: the package is built and submitted inside Elevate."""
+    conn = db.connect()
+    posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
+    label = f"{posting['org']}, {posting['title']}"
+    docs = documents(posting_id)
+    materials = " ".join(json.loads(posting["materials"] or "[]")).lower()
+    kinds = ["resume"]
+    if "cover" in materials and package.load_summary(posting_id).get("cover_letter"):
+        kinds.append("cover_letter")
+    if "transcript" in materials:
+        kinds.append("transcript")
+    folder = package.OUTPUT_DIR / str(posting_id)
+    shot = folder / "elevate_package.png"
+
+    try:
+        if posting_id in elevate_apply.submitted_jobs(page):
+            raise elevate_apply.Blocked("Elevate already lists this job under Application Submitted")
+        tab = elevate_apply.open_apply_form(context, page, posting_id)
+        library = elevate_apply.library_options(tab)
+        missing = [k for k in kinds if not any(o.startswith(elevate_apply.doc_name(k, posting_id) + " (")
+                                               for o in library[k] or [])]
+        if missing:
+            tab.close()
+            for kind in missing:
+                print(f"  uploading {elevate_apply.doc_name(kind, posting_id)} to the Elevate library")
+                elevate_apply.upload_document(page, docs[kind], elevate_apply.doc_name(kind, posting_id), kind)
+            tab = elevate_apply.open_apply_form(context, page, posting_id)
+        chosen = elevate_apply.build_package(tab, posting_id, posting["org"], kinds)
+        print(f"  package: {chosen}")
+        tab.screenshot(path=str(shot), full_page=True)
+        tab.close()  # nothing is kept open: the form is rebuilt after approval
+    except elevate_apply.Blocked as e:
+        discord_bot.call(discord_bot.send("DISCORD_QUESTIONS_CHANNEL_ID",
+                                          f"⛔ Stopped on **{label}** (`{posting_id}`): {e}"))
+        raise wd.Blocked(str(e))
+
+    notes = {"legal": [], "unsure": [], "screenshot": shot.name, "step_shots": [shot.name],
+             "files_expected": [chosen[k] for k in kinds], "files_missing": [], "files_no_slot": []}
+    if wait_for_decision(page, conn, posting_id, label, notes) != "approved":
+        return
+    tab = elevate_apply.open_apply_form(context, page, posting_id)
+    again = elevate_apply.build_package(tab, posting_id, posting["org"], kinds)
+    if again != chosen:
+        tab.close()
+        raise wd.Blocked(f"The package changed since you approved it ({again} vs {chosen}); nothing was sent.")
+    elevate_apply.submit(tab, posting_id)
+    confirm_shot = folder / "submitted.png"
+    tab.screenshot(path=str(confirm_shot), full_page=True)
+    tab.close()
+    if posting_id in elevate_apply.submitted_jobs(page):
+        db.mark_submitted(conn, posting_id)
+        db.set_elevate_status(conn, posting_id, elevate_apply.SUBMITTED)
+        message = f"📨 **Submitted on Elevate** {label} (`{posting_id}`); it's listed under Application Submitted."
+    else:
+        message = (f"⚠️ Pressed Submit Application on {label} (`{posting_id}`) but it isn't listed under "
+                   "Application Submitted. Check the screenshot and Elevate.")
+    discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID",
+                                           [discord_bot.Card(message, files=[confirm_shot])]))
 
 
 def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -> None:
@@ -268,8 +337,13 @@ def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -
         page = browser.page_of(context)
         for posting_id in posting_ids:
             print(f"Applying to {posting_id}...")
+            procedure = db.connect().execute("SELECT procedure FROM postings WHERE id = ?",
+                                             (posting_id,)).fetchone()["procedure"]
             try:
-                run_one(context, page, posting_id, job_url, dry)
+                if procedure == "Accumulate Online" and not dry:
+                    run_elevate(context, page, posting_id)
+                else:
+                    run_one(context, page, posting_id, job_url, dry)
             except wd.Blocked as e:
                 print(f"  stopped: {e}")
                 if len(posting_ids) == 1:

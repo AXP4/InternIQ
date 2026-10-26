@@ -18,9 +18,19 @@ SITE = "icims"
 SHOWS_FILES_ON_REVIEW = False  # file names only appear after the profile is saved
 
 
-def content(page: Page) -> Frame:
-    """The frame holding the portal's real content (the page itself on login.icims.com)."""
+def portal_frame(page: Page) -> Frame:
+    """The portal's own frame (progress bar, title, login); the page itself on login.icims.com."""
     return next((f for f in page.frames if "in_iframe=1" in f.url), page.main_frame)
+
+
+def content(page: Page) -> Frame:
+    """The frame holding the questions to answer.
+
+    Usually the portal frame, but "Portal Specific Forms" (AMD's export control form) is a
+    form iframe nested inside it, loaded from another iCIMS host (module=Forms).
+    """
+    form = next((f for f in page.frames if "module=Forms" in f.url and "showForm" in f.url), None)
+    return form or portal_frame(page)
 
 
 def portal(job_url: str) -> str:
@@ -64,7 +74,7 @@ def sign_in(page: Page, portal_url: str, job: str) -> None:
         frame.locator("#enterEmailSubmitButton").click()
         # An hCaptcha challenge usually pops up a few seconds after Next. Watch for it (Ali
         # solves it) or for the move to iCIMS's central login, for about a minute.
-        for _ in range(30):
+        for _ in range(60):  # about 2 minutes
             page.wait_for_timeout(2000)
             if "login.icims.com" in page.url:
                 break
@@ -235,7 +245,7 @@ def step_position(page: Page) -> tuple[int, int]:
     Steps on AMD: Candidate Profile, Candidate Questions, Job Specific Questions,
     Portal Specific Forms. Only the last one's Submit sends the application.
     """
-    items = content(page).locator(".iCIMS_Steps li").all()
+    items = portal_frame(page).locator(".iCIMS_Steps li").all()
     for index, item in enumerate(items, start=1):
         if "iCIMS_Steps_Current" in (item.get_attribute("class") or ""):
             return index, len(items)
@@ -243,15 +253,15 @@ def step_position(page: Page) -> tuple[int, int]:
 
 
 def current_step(page: Page) -> str:
-    current = content(page).locator(".iCIMS_Steps li.iCIMS_Steps_Current")
+    current = portal_frame(page).locator(".iCIMS_Steps li.iCIMS_Steps_Current")
     if current.count():
         return (current.first.get_attribute("title") or "").replace("\xa0", " ").replace("(Current Step)", "").strip()
-    heads = content(page).locator("h2:visible").all_inner_texts()
+    heads = portal_frame(page).locator("h2:visible").all_inner_texts()
     return heads[0].strip() if heads else ""
 
 
 def page_job_title(page: Page) -> str:
-    heads = content(page).locator("h1:visible").all_inner_texts()
+    heads = portal_frame(page).locator("h1:visible").all_inner_texts()
     return heads[0].strip() if heads else ""
 
 

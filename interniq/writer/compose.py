@@ -29,7 +29,9 @@ documents never state a term length: Ali is available January 2027 through Augus
 Follow RULES.md (screening context, availability, resume profile line, letter writing rules),
 the cover letter template, and the tone of the approved example letters. Claim only what is
 in profile_facts.md. The example letters show tone and structure; never reuse a
-company specific line from them.
+company specific line from them. Their Re: lines and closing sentences are outdated (they
+state term lengths and a May 2027 start): never copy those; write the Re: line and the
+closing from RULES.md (January 2027 start, through August 2028, no term length).
 
 Letter paragraphs: plain sentences, 4 or 5 paragraphs, fitting one page with the header
 (about 330 to 400 words total). You may wrap a project name in <i></i> and the availability

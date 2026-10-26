@@ -204,6 +204,10 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
         fill_until_review(page, filler, driver)
+        if getattr(driver, "SUBMIT_FILLS_PAGES", False):
+            filler.unsure.append("**Submit sends it.** This site's last step has more pages after this one "
+                                 "(voluntary self-disclosure and similar). After your tap they're filled from "
+                                 "your answers (or asked in #questions) and the application is sent.")
         expected = {"resume"} | filler.uploaded
         if package.load_summary(posting_id).get("cover_letter"):
             expected.add("cover_letter")
@@ -248,7 +252,10 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     print("  posting the approval card; keeping the Review page open until Ali decides")
     if wait_for_decision(page, conn, posting_id, label, notes) != "approved":
         return
-    confirmed = driver.submit(page, posting_id)
+    if getattr(driver, "SUBMIT_FILLS_PAGES", False):  # pages after the card (EA's EEO step)
+        confirmed = driver.submit(page, posting_id, filler)
+    else:
+        confirmed = driver.submit(page, posting_id)
     confirm_shot = shot.with_name("submitted.png")
     page.screenshot(path=str(confirm_shot), full_page=True)
     if confirmed:

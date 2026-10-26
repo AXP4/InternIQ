@@ -344,23 +344,46 @@ SUBMITTED_TEXT = ["thank you", "application has been submitted", "successfully s
                   "received your application", "application was submitted"]
 
 
-def submit(page: Page, posting_id: int) -> bool:
-    """Click the final step's button, only if Ali approved this application (checked here)."""
+SUBMIT_FILLS_PAGES = True  # the last step has several pages; submit() fills the rest
+MAX_FINAL_PAGES = 8
+
+
+def submitted(page: Page) -> bool:
+    text = page.locator("body").inner_text().lower()
+    return any(phrase in text for phrase in SUBMITTED_TEXT)
+
+
+def submit(page: Page, posting_id: int, filler=None) -> bool:
+    """Send the application, only if Ali approved it (checked here).
+
+    EA's last step (EEO) is several pages (NDA, voluntary self disclosure, ...) and there
+    is no telling which Next sends the application, so the card is posted on its first
+    page and Ali's approval covers the rest: keep pressing Next/Submit, filling any page
+    that asks something (the filler asks Ali when the bank has no answer), until EA
+    confirms."""
     app = db.get_application(db.connect(), posting_id)
     if not app or app["state"] != "approved":
         raise PermissionError(f"Application {posting_id} is not approved; refusing to submit")
     if not is_review(page):
         raise Blocked("Not on the final step anymore (session may have timed out)")
-    names = [button_text(b) for b in buttons(page)]
-    final = [b for b, n in zip(buttons(page), names) if SUBMIT_TEXT.match(n) or NEXT_TEXT.match(n)]
-    if not final:
-        raise Blocked(f"No submit button on the final step (buttons: {names})")
-    final[-1].click()
-    page.wait_for_load_state()
-    page.wait_for_timeout(8000)
-    wait_out_bot_check(page, "submitting")
-    text = page.locator("body").inner_text().lower()
-    return any(phrase in text for phrase in SUBMITTED_TEXT)
+    for _ in range(MAX_FINAL_PAGES):
+        names = [button_text(b) for b in buttons(page)]
+        final = [b for b, n in zip(buttons(page), names) if SUBMIT_TEXT.match(n) or NEXT_TEXT.match(n)]
+        if not final:
+            raise Blocked(f"No Next or Submit button on the final step (buttons: {names})")
+        final[-1].click()
+        page.wait_for_load_state()
+        page.wait_for_timeout(6000)
+        wait_out_bot_check(page, "submitting")
+        if submitted(page):
+            return True
+        snapshot = read_page(page)
+        if snapshot["errors"]:
+            raise Blocked(f"EA refused a final page: {'; '.join(snapshot['errors'])[:300]}")
+        if snapshot["fields"] and filler is not None:
+            print(f"  final step page: {len(snapshot['fields'])} questions")
+            filler.fill_page(snapshot)
+    return submitted(page)
 
 
 def ensure_signed_in(page: Page) -> None:

@@ -44,6 +44,11 @@ How to work:
 - Repeating sections (work experience, education, websites): press the section's Add
   button, then fill the new fields from resume.yaml / answers.yaml. Never add more entries
   than the source data has.
+- Upload the resume FIRST, before filling anything else on that page: some sites parse it
+  and re-fill other fields. Then read_page and correct whatever the parser filled.
+- Work or professional experience entries are jobs only (resume.yaml WORK EXPERIENCE and
+  VOLUNTEER EXPERIENCE). Projects are not employers: if a parser put projects in there,
+  rewrite those entries as Ali's real jobs, and leave any extra entries empty.
 - Documents: upload the resume to the resume question and the transcript wherever one is
   asked for. If the posting's materials include a cover letter and the form has no
   separate cover letter question, upload the cover letter next to the resume in the
@@ -99,8 +104,9 @@ def compact(snapshot: dict) -> str:
 class Filler:
     """One instance per application run; it collects legal and unsure items for the card."""
 
-    def __init__(self, page, site: str, posting: dict, documents: dict, form_term: str | None):
+    def __init__(self, page, site: str, posting: dict, documents: dict, form_term: str | None, driver=wd):
         self.page, self.site, self.posting, self.documents = page, site, posting, documents
+        self.driver = driver  # the site's driver module (workday, icims): same function names
         self.form_term = form_term
         self.legal: list[dict] = []
         self.unsure: list[str] = []
@@ -124,29 +130,29 @@ class Filler:
         page = self.page
         try:
             if name == "fill_text":
-                return wd.fill_text(page, args["field_id"], args["value"])
+                return self.driver.fill_text(page, args["field_id"], args["value"])
             if name == "select_option":
-                return wd.select_option(page, args["field_id"], args["value"])
+                return self.driver.select_option(page, args["field_id"], args["value"])
             if name == "select_search":
-                return wd.select_search(page, args["field_id"], args["value"])
+                return self.driver.select_search(page, args["field_id"], args["value"])
             if name == "choose_radio":
-                return wd.choose_radio(page, args["field_id"], args["value"])
+                return self.driver.choose_radio(page, args["field_id"], args["value"])
             if name == "set_checkbox":
-                return wd.set_checkbox(page, args["field_id"], args["checked"], args["option"] or None)
+                return self.driver.set_checkbox(page, args["field_id"], args["checked"], args["option"] or None)
             if name == "set_date":
-                return wd.set_date(page, args["field_id"], args["month"], args["year"], args["day"])
+                return self.driver.set_date(page, args["field_id"], args["month"], args["year"], args["day"])
             if name == "upload_file":
                 path = self.documents.get(args["document"])
                 if not path:
                     return f"Ali has no {args['document']} for this posting"
-                result = wd.upload(page, args["field_id"], str(path))
+                result = self.driver.upload(page, args["field_id"], str(path))
                 if result.startswith("ok"):
                     self.uploaded.add(args["document"])
                 return result
             if name == "press_add":
-                return wd.press_add(page, args["button_id"]) + "\n" + compact(wd.read_page(page))
+                return self.driver.press_add(page, args["button_id"]) + "\n" + compact(self.driver.read_page(page))
             if name == "read_page":
-                return compact(wd.read_page(page))
+                return compact(self.driver.read_page(page))
             if name == "ask_ali":
                 answer = answers.ask_ali(args["question"], self.label, self.posting.get("id"))
                 return f"Ali answered: {answer}" if answer else "Ali didn't answer in time. Leave it empty if optional; otherwise record_unsure and move on."
@@ -178,7 +184,7 @@ class Filler:
         text = (f"<context>{json.dumps(intro, ensure_ascii=False)}</context>\n\n"
                 f"Page now:\n{compact(snapshot)}")
         if problems:
-            text += "\n\nWorkday refused to continue because of these errors; fix them:\n- " + "\n- ".join(problems)
+            text += "\n\nThe site refused to continue because of these errors; fix them:\n- " + "\n- ".join(problems)
         messages = [{"role": "user", "content": text}]
         for _ in range(MAX_TURNS):
             response = self.client.beta.messages.create(

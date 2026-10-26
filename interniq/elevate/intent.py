@@ -25,12 +25,16 @@ def row_status(context: BrowserContext, posting_id: int) -> str | None:
     return next((r["elevate_status"] for r in rows if r["id"] == posting_id), None)
 
 
-def express_intent(context: BrowserContext, posting_id: int) -> str:
-    """Click "I intend to apply" for a submitted application. Returns what happened."""
+def express_intent(context: BrowserContext, posting_id: int, via: int | None = None) -> str:
+    """Click "I intend to apply" for a submitted application. Returns what happened.
+
+    `via` is the posting whose application was submitted when `posting_id` is a duplicate
+    Elevate listing of the same employer job.
+    """
     conn = db.connect()
-    app = db.get_application(conn, posting_id)
+    app = db.get_application(conn, via or posting_id)
     if not app or app["state"] != "submitted":
-        raise PermissionError(f"{posting_id} isn't recorded as submitted; not touching Elevate")
+        raise PermissionError(f"{via or posting_id} isn't recorded as submitted; not touching Elevate")
 
     status = row_status(context, posting_id)
     if status is None:

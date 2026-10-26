@@ -127,16 +127,16 @@ def dryrun(posting_id: str = "", job_url: str = "") -> None:
 
     if not posting_id or not job_url:
         raise SystemExit("Usage: python -m interniq dryrun <posting id> <job url on the same site>")
-    run.run(int(posting_id), job_url, dry=True)
+    run.run([int(posting_id)], job_url, dry=True)
 
 
-def apply(posting_id: str = "") -> None:
-    """Fill the application, stop at Review, post the approval card, submit only after approval."""
+def apply(*posting_ids: str) -> None:
+    """Fill each application in one session, stop at Review with a card, submit only after approval."""
     from interniq.applier import run
 
-    if not posting_id:
-        raise SystemExit("Usage: python -m interniq apply <posting id>")
-    run.run(int(posting_id))
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq apply <posting id> [more ids]")
+    run.run([int(p) for p in posting_ids])
 
 
 def intend(posting_id: str = "") -> None:

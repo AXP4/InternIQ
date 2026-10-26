@@ -499,3 +499,9 @@ def files_on_review(page: Page, expected: list[str], timeout_s: int = 30) -> lis
             return []
         page.wait_for_timeout(2000)
     return missing
+
+
+def ensure_signed_in(page: Page) -> None:
+    """Sign in if the application opened on Workday's Create Account/Sign In step."""
+    if current_step(page) == STEPS[0]:
+        sign_in(page)

@@ -1,14 +1,16 @@
-"""One application run: open, sign in, fill every page, stop at Review.
+"""Application runs: open, sign in, fill every page, stop at Review.
 
-Dry run: screenshot the Review page to #log and abandon the draft.
-Real run: post the approval card (with the screenshot) and keep the browser open on the
-Review page until Ali approves (then submit) or skips (then close).
+Several postings can run in one session (one browser, one sign-in). Each one stops at
+its Review page with an approval card, and the page stays open until Ali approves
+(then it's submitted) or skips; then the next posting starts.
+Dry run: fill a decoy job, screenshot its Review page to #log, never submit.
 """
 
 import json
 import time
 
 from interniq import browser, db, discord_bot
+from interniq.applier import icims
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
 from interniq.elevate import intent
@@ -17,6 +19,9 @@ from interniq.writer import package
 MAX_PAGES = 12
 RETRIES_PER_PAGE = 2
 APPROVAL_WAIT_HOURS = 12
+
+# Site name (from the link check) -> the driver module that knows that site's pages.
+DRIVERS = {"workday": wd, "icims": icims}
 
 
 def documents(posting_id: int) -> dict:
@@ -33,117 +38,145 @@ def documents(posting_id: int) -> dict:
     return {name: path for name, path in docs.items() if path.exists()}
 
 
-def fill_until_review(page, filler: Filler) -> None:
+def fill_until_review(page, filler: Filler, driver) -> None:
     for _ in range(MAX_PAGES):
-        if wd.is_review(page):
+        if driver.is_review(page):
             return
-        snapshot = wd.read_page(page)
+        snapshot = driver.read_page(page)
         print(f"  page: {snapshot['step']} ({len(snapshot['fields'])} questions)")
         filler.fill_page(snapshot)
         for attempt in range(RETRIES_PER_PAGE + 1):
-            new_step = wd.next_page(page)
-            if new_step != snapshot["step"] or wd.is_review(page):
+            new_step = driver.next_page(page)
+            if new_step != snapshot["step"] or driver.is_review(page):
                 break
-            errors = wd.read_page(page)["errors"] or ["Workday stayed on this page without saying why"]
+            errors = driver.read_page(page)["errors"] or ["The site stayed on this page without saying why"]
             if attempt == RETRIES_PER_PAGE:
                 raise wd.Blocked(f"Stuck on {snapshot['step']}: {'; '.join(errors)[:300]}")
-            print(f"  Workday refused: {errors}")
-            filler.fill_page(wd.read_page(page), problems=errors)
+            print(f"  the site refused: {errors}")
+            filler.fill_page(driver.read_page(page), problems=errors)
     raise wd.Blocked("Too many pages without reaching Review")
 
 
-def run(posting_id: int, job_url: str | None = None, dry: bool = False) -> None:
+def duplicates_of(conn, posting_id: int) -> list[int]:
+    """Elevate postings marked as duplicates of this one (same employer job listed twice)."""
+    return [r["posting_id"] for r in conn.execute(
+        "SELECT d.posting_id FROM decisions d JOIN postings p ON p.id = d.posting_id "
+        "WHERE p.status = 'duplicate' AND d.reason LIKE ?", (f"%Duplicate of {posting_id}%",))]
+
+
+def after_submit(context, conn, posting_id: int) -> str:
+    """Elevate "I intend to apply" for the posting and any duplicate listing of it."""
+    lines = []
+    for pid in [posting_id] + duplicates_of(conn, posting_id):
+        try:
+            lines.append(f"Elevate 'I intend to apply' ({pid}): {intent.express_intent(context, pid, via=posting_id)}")
+        except Exception as e:  # never let this hide a successful submit
+            lines.append(f"⚠️ Elevate 'I intend to apply' ({pid}) failed ({e}); click it by hand.")
+    return "\n".join(lines)
+
+
+def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> None:
     conn = db.connect()
     posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
     decision = conn.execute("SELECT form_term FROM decisions WHERE posting_id = ?", (posting_id,)).fetchone()
+    driver = DRIVERS.get(posting["site"] or "")
+    if driver is None:
+        raise SystemExit(f"No applier for site {posting['site']!r} yet ({posting_id})")
     docs = documents(posting_id)
     url = job_url or posting["link"]
     folder = package.OUTPUT_DIR / str(posting_id)
     shot = folder / ("dry_run_review.png" if dry else "review.png")
     label = f"{posting['org']}, {posting['title']}"  # replaced by the page's own title once it's read
 
+    try:
+        driver.open_application(page, url)
+        page_title = driver.page_job_title(page)
+        label = f"{posting['org']}, {page_title or posting['title']}"
+        print(f"  page title: {page_title!r}")
+        # Never fill a page for a different job than the posting (a dry run fills a decoy
+        # on purpose, so it only reports the page's title).
+        if not dry and not wd.titles_match(posting["title"], page_title):
+            raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
+                             "Nothing was filled.")
+        driver.ensure_signed_in(page)
+        filler = Filler(page, driver.SITE, posting, docs, decision["form_term"] if decision else None, driver)
+        fill_until_review(page, filler, driver)
+        expected = {"resume"} | filler.uploaded
+        if package.load_summary(posting_id).get("cover_letter"):
+            expected.add("cover_letter")
+        expected_names = sorted(docs[d].name for d in expected if d in docs)
+        missing = driver.files_on_review(page, expected_names)
+        print(f"  files on Review: expected {expected_names}, missing {missing or 'none'}")
+        page.screenshot(path=str(shot), full_page=True)
+        print(f"  reached Review; screenshot saved to {shot}")
+    except wd.Blocked as e:
+        discord_bot.call(discord_bot.send("DISCORD_QUESTIONS_CHANNEL_ID",
+                                          f"⛔ Stopped on **{label}** (`{posting_id}`): {e}"))
+        raise
+
+    notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
+             "files_expected": expected_names, "files_missing": missing}
+    if dry:
+        card = discord_bot.Card(
+            f"🧪 **Dry run reached Review** for {label}\n{url}\n"
+            f"Legal items: {len(filler.legal)} · Unsure: {len(filler.unsure)}\n"
+            + "\n".join(f"• {u}" for u in filler.unsure[:8])
+            + "\nThe window stays open on Review until you close it. Nothing will be submitted.",
+            files=[shot])
+        discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID", [card]))
+        print(json.dumps(notes, indent=1, ensure_ascii=False))
+        print("  dry run done; waiting for Ali to close the window (that abandons the draft)")
+        try:
+            page.wait_for_event("close", timeout=APPROVAL_WAIT_HOURS * 3600 * 1000)
+        except Exception:  # window closed with the whole browser, or the wait ran out
+            pass
+        return
+
+    discord_bot.propose([posting_id])  # records the pending application
+    db.set_application_notes(conn, posting_id, notes)
+    card = discord_bot.approval_card(posting_id)  # now includes the screenshot, legal, and unsure items
+    discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card]))
+    print("  approval card posted; keeping the Review page open until Ali decides")
+
+    deadline = time.time() + APPROVAL_WAIT_HOURS * 3600
+    while time.time() < deadline:
+        page.wait_for_timeout(10_000)
+        state = db.get_application(conn, posting_id)["state"]
+        if state == "skipped":
+            print("  Ali skipped it")
+            return
+        if state == "fixing":
+            print("  Ali asked for a fix; moving on (run it again after the fixed package is ready)")
+            discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
+                                              f"✏️ {label}: run again after the fixed package is ready."))
+            return
+        if state == "approved":
+            confirmed = driver.submit(page, posting_id)
+            confirm_shot = shot.with_name("submitted.png")
+            page.screenshot(path=str(confirm_shot), full_page=True)
+            if confirmed:
+                db.mark_submitted(conn, posting_id)
+                message = f"📨 **Submitted** {label} (`{posting_id}`).\n" + after_submit(context, conn, posting_id)
+            else:
+                message = (f"⚠️ Clicked Submit on {label} (`{posting_id}`) but didn't see a confirmation. "
+                           "Check the screenshot and your email.")
+            discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID",
+                                                   [discord_bot.Card(message, files=[confirm_shot])]))
+            page.wait_for_timeout(5000)
+            return
+    print("  no decision within the wait limit; moving on (the draft stays saved on the site)")
+
+
+def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -> None:
+    """One browser session for every posting, in order. A posting that gets stuck is
+    reported and the session moves on to the next one."""
     with browser.open_browser() as context:
         page = browser.page_of(context)
-        try:
-            wd.open_application(page, url)
-            page_title = wd.page_job_title(page)
-            label = f"{posting['org']}, {page_title or posting['title']}"
-            print(f"  page title: {page_title!r}")
-            # Never fill a page for a different job than the posting (a dry run fills a
-            # decoy on purpose, so it only reports the page's title).
-            if not dry and not wd.titles_match(posting["title"], page_title):
-                raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
-                                 "Nothing was filled.")
-            if wd.current_step(page) == wd.STEPS[0]:
-                wd.sign_in(page)
-            filler = Filler(page, wd.SITE, posting, docs, decision["form_term"] if decision else None)
-            fill_until_review(page, filler)
-            expected = {"resume"} | filler.uploaded
-            if package.load_summary(posting_id).get("cover_letter"):
-                expected.add("cover_letter")
-            expected_names = sorted(docs[d].name for d in expected if d in docs)
-            missing = wd.files_on_review(page, expected_names)
-            print(f"  files on Review: expected {expected_names}, missing {missing or 'none'}")
-            page.screenshot(path=str(shot), full_page=True)
-            (folder / shot.with_suffix(".txt").name).write_text(page.locator("body").inner_text(), encoding="utf-8")
-            print(f"  reached Review; screenshot saved to {shot}")
-        except wd.Blocked as e:
-            discord_bot.call(discord_bot.send("DISCORD_QUESTIONS_CHANNEL_ID",
-                                              f"⛔ Stopped on **{label}** (`{posting_id}`): {e}"))
-            raise
-
-        notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
-                 "files_expected": expected_names, "files_missing": missing}
-        if dry:
-            card = discord_bot.Card(
-                f"🧪 **Dry run reached Review** for {label}\n{url}\n"
-                f"Legal items: {len(filler.legal)} · Unsure: {len(filler.unsure)}\n"
-                + "\n".join(f"• {u}" for u in filler.unsure[:8])
-                + "\nThe window stays open on Review until you close it. Nothing will be submitted.",
-                files=[shot])
-            discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID", [card]))
-            print(json.dumps(notes, indent=1, ensure_ascii=False))
-            print("  dry run done; waiting for Ali to close the window (that abandons the draft)")
+        for posting_id in posting_ids:
+            print(f"Applying to {posting_id}...")
             try:
-                page.wait_for_event("close", timeout=APPROVAL_WAIT_HOURS * 3600 * 1000)
-            except Exception:  # window closed with the whole browser, or the wait ran out
-                pass
-            return
-
-        discord_bot.propose([posting_id])  # records the pending application
-        db.set_application_notes(conn, posting_id, notes)
-        card = discord_bot.approval_card(posting_id)  # now includes the screenshot, legal, and unsure items
-        discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card]))
-        print("  approval card posted; keeping the Review page open until Ali decides")
-
-        deadline = time.time() + APPROVAL_WAIT_HOURS * 3600
-        while time.time() < deadline:
-            page.wait_for_timeout(10_000)
-            state = db.get_application(conn, posting_id)["state"]
-            if state == "skipped":
-                print("  Ali skipped it; closing")
-                return
-            if state == "fixing":
-                print("  Ali asked for a fix; closing so the package can be redone and the run restarted")
-                discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
-                                                  f"✏️ {label}: run again after the fixed package is ready."))
-                return
-            if state == "approved":
-                confirmed = wd.submit(page, posting_id)
-                confirm_shot = shot.with_name("submitted.png")
-                page.screenshot(path=str(confirm_shot), full_page=True)
-                if confirmed:
-                    db.mark_submitted(conn, posting_id)
-                    message = f"📨 **Submitted** {label} (`{posting_id}`)."
-                    try:
-                        message += f"\nElevate 'I intend to apply': {intent.express_intent(context, posting_id)}"
-                    except Exception as e:  # never let this hide a successful submit
-                        message += f"\n⚠️ Elevate 'I intend to apply' failed ({e}); click it by hand."
-                else:
-                    message = (f"⚠️ Clicked Submit on {label} (`{posting_id}`) but didn't see a confirmation. "
-                               "Check the screenshot and your email.")
-                discord_bot.call(discord_bot.send_many("DISCORD_LOG_CHANNEL_ID",
-                                                       [discord_bot.Card(message, files=[confirm_shot])]))
-                page.wait_for_timeout(5000)
-                return
-        print("  no decision within the wait limit; closing (the draft stays in Workday)")
+                run_one(context, page, posting_id, job_url, dry)
+            except wd.Blocked as e:
+                print(f"  stopped: {e}")
+                if len(posting_ids) == 1:
+                    raise

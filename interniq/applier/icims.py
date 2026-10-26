@@ -54,6 +54,30 @@ def decline_passkey(page: Page) -> bool:
     return True
 
 
+def hand_login_to_ali(page: Page, portal_url: str) -> None:
+    """The login didn't move on by itself (no redirect, no visible bot check). Save a
+    screenshot, ask Ali to finish it in the window, and wait until the portal is past it."""
+    page.screenshot(path=str(config.ROOT / "data" / "icims_login_stuck.png"), full_page=True)
+    discord_bot.call(discord_bot.send(
+        "DISCORD_QUESTIONS_CHANNEL_ID",
+        f"🔐 The AMD login didn't continue on its own. Please finish logging in in the InternIQ "
+        f"browser window ({urlparse(portal_url).netloc}); I'll take over once you're past it."))
+    for _ in range(180):  # up to 30 minutes
+        page.wait_for_timeout(10_000)
+        decline_passkey(page)
+        if "login.icims.com" in page.url:
+            continue
+        try:
+            frame = content(page)
+            on_login = frame.locator("#email:visible").count() + frame.locator("#accept_gdpr:visible").count()
+        except Exception:
+            on_login = 1
+        if not on_login:
+            print("  Ali finished the login")
+            return
+    raise Blocked("The AMD login wasn't finished within 30 minutes")
+
+
 def sign_in(page: Page, portal_url: str, job: str) -> None:
     """Portal login page -> accept the privacy statement (Ali approved this for AMD) ->
     email -> central iCIMS login -> password slots in order (the remembered one first)."""
@@ -88,8 +112,9 @@ def sign_in(page: Page, portal_url: str, job: str) -> None:
         except Exception:
             still_on_email = False
         if still_on_email:
-            raise Blocked("The AMD portal stayed on its login page after the email step")
-        print("  already signed in to the portal (session remembered)")
+            hand_login_to_ali(page, portal_url)
+        else:
+            print("  already signed in to the portal (session remembered)")
         return
 
     host = urlparse(portal_url).netloc

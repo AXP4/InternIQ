@@ -130,8 +130,25 @@ def describe(page: Page, field_id: str) -> dict:
 
 # ---------- actions (each one verifies the value stuck) ----------
 
+MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august",
+          "september", "october", "november", "december"]
+
+
+def as_month_value(value: str) -> str:
+    """"April 2029" or "04/2029" -> "2029-04", the only form EA's month boxes accept."""
+    text = value.strip().lower()
+    year = re.search(r"\b(19|20)\d\d\b", text)
+    month = next((i + 1 for i, m in enumerate(MONTHS) if m[:3] in text), None)
+    if month is None and (num := re.search(r"\b(0?[1-9]|1[0-2])\b", text.replace(year.group(0), "") if year else text)):
+        month = int(num.group(1))
+    return f"{year.group(0)}-{month:02d}" if year and month else value
+
+
 def fill_text(page: Page, field_id: str, value: str) -> str:
     box = field(page, field_id)
+    kind = (box.get_attribute("type") or "").lower()
+    if kind == "month" and not re.fullmatch(r"\d{4}-\d{2}", value.strip()):
+        value = as_month_value(value)
     box.fill(value)
     box.press("Tab")
     got = box.input_value()

@@ -130,6 +130,25 @@ with something Ali can run and see working.
 ## Phase 7: More site types
 - Add, one at a time: iCIMS, SuccessFactors, Greenhouse, Oracle, UltiPro, Eightfold,
   Raise (Enbridge), simple custom sites. Save site notes as they're learned.
+- ✅ **iCIMS** (`applier/icims.py`), tested on AMD: 8 applications submitted in two
+  sessions with one login each, every one approved by Ali, plus Elevate intent.
+  - The portal lives in an iframe (`in_iframe=1`); step 4 forms sit in a second, nested
+    frame. The current step comes from the progress bar (`.iCIMS_Steps_Current`), and
+    only the last step's Submit sends the application, so `next_page` refuses there.
+  - Sign in: email plus privacy consent, then hCaptcha (Ali solves it) and the
+    login.icims.com password page. Only the remembered password slot is tried, and a
+    passkey prompt is declined. If anything looks stuck, Ali gets a screenshot and takes over.
+  - iCIMS reopens real jobs at step 3, so the shared profile resume is replaced first
+    through "Update Your Profile". One-file upload fields refuse a second file (a cover
+    letter once replaced the resume).
+  - `apply <ids...>` runs a batch in one browser session. Duplicate postings for the same
+    job get the Elevate intent after the one submit.
+  - Approval cards now carry `answers.txt` (every answer and where it came from, with ⚠️
+    for required fields left empty) and a screenshot of each filled step.
+  - Skill levels come only from the answer bank; otherwise Claude asks once per page.
+    It never picks the lowest option when the bank says "none".
+  - Bug found live: a late Submit tap on an old card reset a submitted application to
+    approved. Submitted rows are now final.
 - Employer Email postings: draft emails for approval.
 - "Accumulate Online" postings (14 in the first crawl): apply inside Elevate itself, same
   approval flow. Left for the end by Ali's decision, along with other odd cases.

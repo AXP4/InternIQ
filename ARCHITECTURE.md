@@ -103,7 +103,8 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   Verification codes: try the Outlook API (Microsoft Graph); if UCalgary blocks it,
   ask Ali on Discord to paste the code.
 - **Form filling loop** (this is the "agent" part):
-  1. The site driver (`workday.py`) reads every visible question on the page: label,
+  1. The site driver (`workday.py`, `icims.py`; each has the same function names, so
+     `run.py` picks one from the site) reads every visible question on the page: label,
      kind (text, select, search select, radio, checkbox, date, file), options, required
      flag, and current value, and tags each with a stable id.
   2. `filler.py` sends them to Claude Sonnet with RULES.md, profile facts, resume.yaml,
@@ -119,14 +120,19 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   `config/learned_answers.yaml` (gitignored) so it's reused.
 - Before filling, the job title on the page must match the posting. At Review: check
   every expected file is listed, screenshot, post the approval card, and keep the page
-  open until Ali decides. `workday.submit()` refuses unless the application is approved.
+  open until Ali decides. `submit()` in every driver refuses unless the application is
+  approved. The card also carries `answers.txt` (each answer and its source) and a
+  screenshot of every filled step.
+- iCIMS specifics: the form sits in nested iframes, steps are read from the progress bar,
+  and the shared profile resume is replaced before each job because iCIMS reopens jobs
+  past the resume step. A batch (`apply <ids...>`) shares one sign-in.
 - After a confirmed submit, `elevate/intent.py` clicks "I intend to apply" on Elevate
   (the only Elevate click that changes anything) and confirms the row shows "Expressed
   Intention to Apply".
 - Saves per-site notes (`site_notes` table) such as "a saved draft shows Continue
   Application" so it gets better over time.
 - Commands: `dryrun <id> <url>` (fill a decoy job on the same site, stop at Review),
-  `apply <id>`, `intend <id>`.
+  `apply <ids...>`, `intend <id>`.
 - **Employer Email** postings: draft the email with attachments and send it to Ali for
   approval (send automatically only if Outlook API access works).
 

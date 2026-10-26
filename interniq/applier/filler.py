@@ -69,6 +69,10 @@ How to work:
   than the source data has.
 - Upload the resume FIRST, before filling anything else on that page: some sites parse it
   and re-fill other fields. Then read_page and correct whatever the parser filled.
+- Skill tag lists (a multiselect "Skills" field) that a resume parser filled: never keep the
+  parser's picks. Set the list to exactly the skills profile_facts.md names (its Strong,
+  Working, and Coursework lists, plus soft skills it states), dropping every other tag.
+  Languages only if profile_facts.md lists them.
 - Work or professional experience entries are jobs only (resume.yaml WORK EXPERIENCE and
   VOLUNTEER EXPERIENCE). Projects are not employers: if a parser put projects in there,
   rewrite those entries as Ali's real jobs, and leave any extra entries empty.

@@ -58,7 +58,9 @@ layout, PCB, silicon validation), mechanical or civil design.
 ## 2. Availability and term choice
 - **Ali's window:** January 2027 through August 2028. Never offer availability past
   August 2028 (he returns to school in September 2028).
-- The resume and cover letter state only that window, never a term length.
+- The resume and cover letter state only that window, never a term length. Exception: when
+  the posting itself asks applicants to state a term preference, the letter states it in one
+  sentence, lengths written as words, following the order below (e.g. Whitecap 152326).
 - Term selection only happens on application forms that force a choice:
   - **Length priority:** 12 months, then 16, then 8, then 4.
   - **Start:** always the January 2027 start when offered; otherwise the posting's other start.

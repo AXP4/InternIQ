@@ -16,6 +16,7 @@ Claude loop is needed:
 import re
 
 from playwright.sync_api import BrowserContext, Page
+from pypdf import PdfWriter
 
 from interniq import browser, db
 from interniq.elevate import crawler
@@ -25,8 +26,11 @@ APPLICATIONS_URL = "/myAccount/engineering/applications-engineering.htm"
 SUBMITTED = "Application Submitted"
 
 # Elevate's document type ids; the apply form's dropdowns are named after them too.
-DOC_TYPES = {"cover_letter": "30", "resume": "31", "transcript": "32"}
+# "combined" is one merged PDF (letter, resume, transcript) for postings that ask for
+# everything in one document; it goes in the resume slot, the only required one.
+DOC_TYPES = {"cover_letter": "30", "resume": "31", "transcript": "32", "combined": "31"}
 TRANSCRIPT_NAME = "Ali_Alanizi_Transcript"
+ONE_DOCUMENT = re.compile(r"\b(in|as|into) (one|a single) (document|pdf|file)\b", re.IGNORECASE)
 
 
 class Blocked(Exception):
@@ -41,8 +45,17 @@ def doc_name(kind: str, posting_id: int) -> str:
     """The library name for one posting's document, e.g. Ali_Alanizi_Resume_151913."""
     if kind == "transcript":
         return TRANSCRIPT_NAME
-    label = {"resume": "Resume", "cover_letter": "Cover_Letter"}[kind]
+    label = {"resume": "Resume", "cover_letter": "Cover_Letter", "combined": "Application"}[kind]
     return f"Ali_Alanizi_{label}_{posting_id}"
+
+
+def merge(paths: list, out) -> None:
+    """Join PDFs into one file, in order."""
+    writer = PdfWriter()
+    for path in paths:
+        writer.append(str(path))
+    with open(out, "wb") as f:
+        writer.write(f)
 
 
 def upload_document(page: Page, path, name: str, kind: str) -> None:

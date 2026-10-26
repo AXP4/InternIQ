@@ -282,6 +282,13 @@ def run_elevate(context, page, posting_id: int) -> None:
     if "transcript" in materials:
         kinds.append("transcript")
     folder = package.OUTPUT_DIR / str(posting_id)
+    if elevate_apply.ONE_DOCUMENT.search(f"{posting['description']} {posting['additional_info'] or ''}"):
+        # Letter first, then resume, then transcript, as one PDF.
+        docs["combined"] = folder / "Ali_Alanizi_Application.pdf"
+        order = [k for k in ("cover_letter", "resume", "transcript") if k in kinds]
+        elevate_apply.merge([docs[k] for k in order], docs["combined"])
+        print(f"  the posting wants one document: merged {', '.join(order)}")
+        kinds = ["combined"]
     shot = folder / "elevate_package.png"
 
     try:

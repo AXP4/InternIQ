@@ -127,6 +127,7 @@ class Filler:
         self.legal: list[dict] = []
         self.unsure: list[str] = []
         self.uploaded: set[str] = set()  # documents whose upload showed up in the field
+        self.attempted: set[str] = set()  # documents Claude tried to upload (found a slot for)
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         notes = db.site_notes(db.connect(), site)
         text = "\n\n".join([
@@ -161,6 +162,7 @@ class Filler:
                 path = self.documents.get(args["document"])
                 if not path:
                     return f"Ali has no {args['document']} for this posting"
+                self.attempted.add(args["document"])
                 result = self.driver.upload(page, args["field_id"], str(path))
                 if result.startswith("ok"):
                     self.uploaded.add(args["document"])

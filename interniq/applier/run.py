@@ -111,10 +111,13 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         if package.load_summary(posting_id).get("cover_letter"):
             expected.add("cover_letter")
         expected_names = sorted(docs[d].name for d in expected if d in docs)
+        # A document with no upload slot on the form isn't "missing", just not asked for.
+        no_slot = sorted(docs[d].name for d in expected - filler.attempted - {"resume"} if d in docs)
+        expected_names = [n for n in expected_names if n not in no_slot]
         if getattr(driver, "SHOWS_FILES_ON_REVIEW", True):
             missing = driver.files_on_review(page, expected_names)
         else:  # the site doesn't list files before submit: trust the confirmed uploads
-            missing = sorted(docs[d].name for d in expected - filler.uploaded if d in docs)
+            missing = sorted(docs[d].name for d in expected - filler.uploaded if d in docs and docs[d].name not in no_slot)
         print(f"  files on Review: expected {expected_names}, missing {missing or 'none'}")
         page.screenshot(path=str(shot), full_page=True)
         print(f"  reached Review; screenshot saved to {shot}")
@@ -124,7 +127,7 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         raise
 
     notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
-             "files_expected": expected_names, "files_missing": missing}
+             "files_expected": expected_names, "files_missing": missing, "files_no_slot": no_slot}
     if dry:
         card = discord_bot.Card(
             f"🧪 **Dry run reached Review** for {label}\n{url}\n"

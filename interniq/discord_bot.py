@@ -263,7 +263,9 @@ def approval_card(posting_id: int) -> Card:
         head.append(f"🚫 **Missing on the Review page:** {', '.join(run_notes['files_missing'])}. Don't submit "
                     "until this is fixed.")
     elif run_notes.get("files_expected"):
-        head.append(f"📎 On the Review page: {', '.join(run_notes['files_expected'])}")
+        head.append(f"📎 Uploaded: {', '.join(run_notes['files_expected'])}")
+    if run_notes.get("files_no_slot"):
+        head.append(f"📎 The form has no place for: {', '.join(run_notes['files_no_slot'])}")
     for item in run_notes.get("legal", []):
         head.append(f"⚖️ **Confirm:** {item['question']} → **{item['answer']}**")
     for item in run_notes.get("unsure", []):

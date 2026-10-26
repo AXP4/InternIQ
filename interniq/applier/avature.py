@@ -344,7 +344,7 @@ def is_review(page: Page) -> bool:
     the self disclosure had no step bar and its Next sent the application, so a page we
     can't place is treated as final (the card goes up there and only submit() clicks)."""
     position, total = step_position(page)
-    return not total or position == total
+    return not total or not position or position == total  # no bar, no current step, or last
 
 
 def files_on_review(page: Page, expected: list[str], timeout_s: int = 30) -> list[str]:

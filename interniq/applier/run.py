@@ -187,6 +187,7 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
             print(f"  profile: replacing the stored resume ({before})")
             filler.fill_page(driver.read_page(page))
             snap_step(page, filler, "Candidate Profile")
+            check_names(filler)
             result = driver.save_profile(page, before)
             print(f"  profile saved: {result}")
             if result.startswith("⚠️"):

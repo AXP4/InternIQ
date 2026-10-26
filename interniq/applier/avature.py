@@ -344,6 +344,16 @@ SUBMITTED_TEXT = ["thank you", "application has been submitted", "successfully s
                   "received your application", "application was submitted"]
 
 
+def posting_listed(page: Page) -> bool:
+    """True when the account's Job Applications list shows this job (EA confirms nothing
+    on the page itself)."""
+    job_id = re.search(r"jobId=(\d+)", page.url)
+    page.goto(f"https://{host()}/en_US/careers/ProfileJobApplications", wait_until="domcontentloaded")
+    page.wait_for_timeout(4000)
+    text = page.locator("body").inner_text()
+    return bool(job_id and job_id.group(1) in text) or (_job_title["text"] and _job_title["text"] in text)
+
+
 SUBMIT_FILLS_PAGES = True  # the last step has several pages; submit() fills the rest
 MAX_FINAL_PAGES = 8
 
@@ -366,11 +376,15 @@ def submit(page: Page, posting_id: int, filler=None) -> bool:
         raise PermissionError(f"Application {posting_id} is not approved; refusing to submit")
     if not is_review(page):
         raise Blocked("Not on the final step anymore (session may have timed out)")
+    if filler is not None:
+        filler.after_approval = True
     for _ in range(MAX_FINAL_PAGES):
         names = [button_text(b) for b in buttons(page)]
         final = [b for b, n in zip(buttons(page), names) if SUBMIT_TEXT.match(n) or NEXT_TEXT.match(n)]
         if not final:
-            raise Blocked(f"No Next or Submit button on the final step (buttons: {names})")
+            # EA's last page (after the post-approval questions) has no buttons in the form:
+            # the application list is the real check.
+            return submitted(page) or posting_listed(page)
         final[-1].click()
         page.wait_for_load_state()
         page.wait_for_timeout(6000)
@@ -388,3 +402,53 @@ def submit(page: Page, posting_id: int, filler=None) -> bool:
 
 def ensure_signed_in(page: Page) -> None:
     """Avature signs in (or creates the account) inside the application itself."""
+
+
+# ---------- the account's stored resume ----------
+# A signed-in applicant skips Select Your Resume and the account's resume goes with the
+# application, so it's replaced on the profile page first (like iCIMS).
+
+PROFILE_URL = "https://jobs.ea.com/en_US/careers/Profile"
+
+
+def stored_resume(page: Page) -> str:
+    """The stored resume's file name, from the profile page's Preview link. Returns to the
+    edit page if that's where it was called from."""
+    came_from = page.url
+    page.goto(PROFILE_URL, wait_until="domcontentloaded")
+    page.wait_for_timeout(4000)
+    link = page.locator('a[href*="htmlPreview.php"]')
+    href = link.first.get_attribute("href") if link.count() else ""
+    match = re.search(r"file=[^/]*/([^&]+)", href or "")
+    if "ProfileEdit" in came_from:
+        page.goto(came_from, wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+    return match.group(1) if match else "(none)"
+
+
+def open_profile(page: Page, job_url: str) -> bool:
+    """Open the profile edit page when the account exists; False for a first application."""
+    slot = db.get_setting(db.connect(), f"password_slot:{host()}", "")
+    if not slot:
+        return False
+    page.goto(PROFILE_URL + "Edit", wait_until="domcontentloaded")
+    page.wait_for_timeout(5000)
+    if page.locator('input[name="username"]:visible').count():
+        sign_in(page, int(slot))
+        page.goto(PROFILE_URL + "Edit", wait_until="domcontentloaded")
+        page.wait_for_timeout(5000)
+    return True
+
+
+def save_profile(page: Page, before: str) -> str:
+    """Save the profile, then check the stored resume really changed."""
+    page.locator("button:has-text('Submit'):visible").first.click()
+    page.wait_for_load_state()
+    page.wait_for_timeout(5000)
+    errors = page.evaluate(ERRORS_JS)
+    if errors:
+        return f"⚠️ The profile didn't save: {'; '.join(errors)[:200]}"
+    after = stored_resume(page)
+    if after == before:
+        return f"⚠️ The stored resume didn't change ({after}); this job may go out with the previous job's resume"
+    return f"stored resume is now {after}"

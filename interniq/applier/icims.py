@@ -574,8 +574,15 @@ def save_profile(page: Page, before: str) -> str:
     errors = sorted({e for e in content(page).evaluate(ERRORS_JS) if "success" not in e.lower()})
     if errors:
         raise Blocked(f"AMD wouldn't save the profile: {'; '.join(errors)[:300]}")
-    page.goto(page.url, wait_until="domcontentloaded")  # reload to read the stored file name
-    page.wait_for_timeout(5000)
-    after = stored_resume(page)
-    return f"resume on the profile changed from {before!r} to {after!r}" if after and after != before \
-        else f"⚠️ the stored resume didn't change (still {after or before!r})"
+    # The new file name shows up only after iCIMS finishes storing it, which can take a while:
+    # reading it right away once reported a good upload as unchanged. Reload and re-check.
+    profile_url = f"{portal(page.url)}/jobs/candidate?back=dashboard"
+    after = before
+    for _ in range(6):  # about 30 seconds
+        page.wait_for_timeout(5000)
+        page.goto(profile_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+        after = stored_resume(page)
+        if after and after != before:
+            return f"resume on the profile changed from {before!r} to {after!r}"
+    return f"⚠️ the stored resume didn't change (still {after or before!r})"

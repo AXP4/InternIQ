@@ -15,6 +15,7 @@ from interniq.applier.workday import (Blocked, best_option, bot_check_visible, p
                                       wait_out_bot_check)
 
 SITE = "icims"
+SHOWS_FILES_ON_REVIEW = False  # file names only appear after the profile is saved
 
 
 def content(page: Page) -> Frame:
@@ -270,6 +271,10 @@ def fill_text(page: Page, field_id: str, value: str) -> str:
 def select_option(page: Page, field_id: str, value: str) -> str:
     box = field(page, field_id)
     names = box.evaluate("e => [...e.options].map(o => o.text.trim())")
+    if not value.strip() and names:
+        # Clearing a dropdown: pick its empty placeholder ("", "Make a Selection", ...).
+        box.select_option(index=0)
+        return f"ok (cleared to {names[0]!r})"
     choice = best_option(names, value)
     if not choice:
         return f"no option matches {value!r}; options are: {names[:80]}"

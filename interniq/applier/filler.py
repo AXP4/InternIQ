@@ -41,6 +41,7 @@ How to work:
 - You may call several tools at once. Every tool returns what actually happened; if a
   value didn't stick or an option didn't match, fix it (the error lists the real options).
 - Pick dropdown options by meaning, not wording. If no option is honestly right, ask Ali.
+  To clear a dropdown, call select_option with an empty value.
 - Repeating sections (work experience, education, websites): press the section's Add
   button, then fill the new fields from resume.yaml / answers.yaml. Never add more entries
   than the source data has.

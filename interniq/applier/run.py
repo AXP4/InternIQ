@@ -41,6 +41,12 @@ def documents(posting_id: int) -> dict:
 def fill_until_review(page, filler: Filler, driver) -> None:
     for _ in range(MAX_PAGES):
         if driver.is_review(page):
+            # Some sites put questions on the same page as the final Submit (iCIMS); fill
+            # them, then stop. A pure review page (Workday) has no questions to fill.
+            last = driver.read_page(page)
+            if last["fields"]:
+                print(f"  final page: {last['step']} ({len(last['fields'])} questions)")
+                filler.fill_page(last)
             return
         snapshot = driver.read_page(page)
         print(f"  page: {snapshot['step']} ({len(snapshot['fields'])} questions)")
@@ -105,7 +111,10 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         if package.load_summary(posting_id).get("cover_letter"):
             expected.add("cover_letter")
         expected_names = sorted(docs[d].name for d in expected if d in docs)
-        missing = driver.files_on_review(page, expected_names)
+        if getattr(driver, "SHOWS_FILES_ON_REVIEW", True):
+            missing = driver.files_on_review(page, expected_names)
+        else:  # the site doesn't list files before submit: trust the confirmed uploads
+            missing = sorted(docs[d].name for d in expected - filler.uploaded if d in docs)
         print(f"  files on Review: expected {expected_names}, missing {missing or 'none'}")
         page.screenshot(path=str(shot), full_page=True)
         print(f"  reached Review; screenshot saved to {shot}")

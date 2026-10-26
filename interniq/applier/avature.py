@@ -338,8 +338,11 @@ def next_page(page: Page) -> str:
 
 
 def is_review(page: Page) -> bool:
+    """The last step, or any application page without the step bar: on EA the page after
+    the self disclosure had no step bar and its Next sent the application, so a page we
+    can't place is treated as final (the card goes up there and only submit() clicks)."""
     position, total = step_position(page)
-    return bool(total) and position == total
+    return not total or position == total
 
 
 def files_on_review(page: Page, expected: list[str], timeout_s: int = 30) -> list[str]:

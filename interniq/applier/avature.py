@@ -107,9 +107,14 @@ def page_job_title(page: Page) -> str:
 
 def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
+    fields = page.evaluate(READ_FIELDS_JS)
+    if "ProfileEdit" in page.url:
+        # The profile visit only swaps the resume; other uploads there (Additional
+        # Documentation) show up above the resume and travel with every application.
+        fields = [f for f in fields if f["kind"] != "file" or f["label"].strip().lower() == "resume"]
     return {
         "step": current_step(page),
-        "fields": page.evaluate(READ_FIELDS_JS),
+        "fields": fields,
         "add_buttons": [],
         "errors": sorted(set(page.evaluate(ERRORS_JS))),
     }
@@ -253,7 +258,8 @@ def open_application(page: Page, job_url: str) -> None:
     wait_out_bot_check(page, "opening the job page")
     # "AI Engineer Intern - 216236 - Electronic Arts": drop the job number and company.
     _job_title["text"] = re.sub(r"\s+-\s+\d+\s+-\s+.*$", "", page.title()).strip()
-    apply = page.locator('a[href*="ApplicationMethods"]')
+    # Signed out: ApplicationMethods; signed in: ApplicationGeneralInformation.
+    apply = page.locator('a[href*="/careers/Application"]', has_text=re.compile(r"^\s*apply\s*$", re.I))
     if not apply.count():
         raise Blocked("The job page has no Apply link (closed posting?)")
     page.goto(apply.first.get_attribute("href"), wait_until="domcontentloaded")
@@ -417,8 +423,13 @@ def stored_resume(page: Page) -> str:
     came_from = page.url
     page.goto(PROFILE_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(4000)
-    link = page.locator('a[href*="htmlPreview.php"]')
-    href = link.first.get_attribute("href") if link.count() else ""
+    # Newest resume first; other documents (Additional Documentation) are listed too.
+    href = page.evaluate(r"""() => { const a = [...document.querySelectorAll('a[href*="htmlPreview.php"]')]
+        .find(a => { let b = a.parentElement;
+                     for (let i = 0; i < 8 && b; i++, b = b.parentElement)
+                       if (/\(Resume\)/.test(b.innerText.slice(0, 80))) return true;
+                     return false; });
+        return a ? a.href : ''; }""")
     match = re.search(r"file=[^/]*/([^&]+)", href or "")
     if "ProfileEdit" in came_from:
         page.goto(came_from, wait_until="domcontentloaded")

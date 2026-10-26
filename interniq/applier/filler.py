@@ -31,7 +31,9 @@ a skill level, or an answer. If a required question isn't covered, ask Ali.
 Skill or experience levels: answer ONLY from answers.yaml skill_levels, learned answers, or
 a skill profile_facts.md lists by name (its "None" list means no exposure). Never infer a
 level from related skills, and never default to "no exposure". Every other skill level must
-be asked.
+be asked. If the bank says "none" but the form has no option meaning none (its lowest is
+something like "less than 1 year"), do NOT pick the lowest option: ask Ali, because that
+option can read as claiming some experience.
 
 Asking: before filling a page, collect EVERY question on it you can't answer from those
 sources and ask them all in ONE ask_ali call, numbered, each with its options, e.g.

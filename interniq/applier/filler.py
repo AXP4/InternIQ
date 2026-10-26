@@ -42,6 +42,12 @@ How to work:
   value didn't stick or an option didn't match, fix it (the error lists the real options).
 - Pick dropdown options by meaning, not wording. If no option is honestly right, ask Ali.
   To clear a dropdown, call select_option with an empty value.
+- Term questions ("preferred length of your co-op term", start term, ...): pick from the
+  options offered in this order: 12 months, then 16, then 8, then 4, with the January 2027
+  start when offered (answers.yaml availability). Never answer "none of these".
+- Ali's own email and phone go in every field asking for HIS contact details, exactly as in
+  answers.yaml. Referral "Source" fields (source email, source phone, referrer) are about
+  who referred him: leave them empty unless the answer bank names a referrer.
 - Repeating sections (work experience, education, websites): press the section's Add
   button, then fill the new fields from resume.yaml / answers.yaml. Never add more entries
   than the source data has.

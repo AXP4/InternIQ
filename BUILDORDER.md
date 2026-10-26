@@ -149,7 +149,19 @@ with something Ali can run and see working.
     It never picks the lowest option when the bank says "none".
   - Bug found live: a late Submit tap on an old card reset a submitted application to
     approved. Submitted rows are now final.
-- Employer Email postings: draft emails for approval.
+- ✅ **Avature** (`applier/avature.py`), tested on EA: 2 applications submitted.
+  - First application creates the account (password from the first SITE_PASSWORD slot that
+    meets the site's strength rules); later ones sign in, swap the profile resume first, and
+    follow "Apply" or "Finish your application".
+  - EA's last steps are irregular (pages with no step bar, or no current step, and one of
+    them sends the application), so any page the driver can't place counts as final.
+  - **Approval 2:** submit presses exactly once. If another page with questions appears
+    instead of a confirmation, it's filled and gets its own approval card before the next
+    press. EA confirms nothing on the page, so the account's Job Applications list decides.
+  - Safety added from live runs: form name fields always get the legal name (a check stops
+    before Next otherwise), parser-filled skill tags are replaced with profile facts only.
+- Employer Email postings: draft emails for approval (Terra Sense was sent by Ali by hand
+  from a drafted text).
 - ✅ "Accumulate Online" postings: apply inside Elevate itself (`elevate/apply.py`), same
   approval flow. Moved ahead of the other sites because of deadlines; 7 submitted on
   2026-10-26 with Ali approving each.

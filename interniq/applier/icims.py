@@ -493,3 +493,23 @@ def submit(page: Page, posting_id: int) -> bool:
 
 def ensure_signed_in(page: Page) -> None:
     """iCIMS signs in inside open_application, so there's nothing left to do here."""
+
+
+# Steps that can be reopened by URL (iCIMS skips steps it considers complete).
+STEP_PATHS = {"Job Specific Questions": "questions"}
+
+
+def step_names(page: Page) -> list[str]:
+    return [(li.get_attribute("title") or "").replace("\xa0", " ").replace("(Current Step)", "").strip()
+            for li in portal_frame(page).locator(".iCIMS_Steps li").all()]
+
+
+def open_step(page: Page, name: str) -> bool:
+    """Go back to a step the portal skipped. True if it's now the current step."""
+    path = STEP_PATHS.get(name)
+    match = re.match(r"(https://[^/]+/jobs/\d+/[^/?#]+)", page.url)
+    if not path or not match:
+        return False
+    page.goto(f"{match.group(1)}/{path}", wait_until="domcontentloaded")
+    page.wait_for_timeout(6000)
+    return current_step(page) == name

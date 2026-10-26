@@ -38,9 +38,32 @@ def documents(posting_id: int) -> dict:
     return {name: path for name, path in docs.items() if path.exists()}
 
 
+def revisit_skipped(page, filler: Filler, driver, visited: set[str]) -> None:
+    """Some sites jump over steps they consider complete (answers from an earlier session).
+    Go back to each one this run never saw, fill it, and return to the final step."""
+    if not hasattr(driver, "step_names"):
+        return
+    for name in driver.step_names(page)[:-1]:
+        if name in visited:
+            continue
+        if not driver.open_step(page, name):
+            filler.unsure.append(f"**The site skipped the '{name}' step and I couldn't reopen it.** "
+                                 "Its answers are from an earlier session; check them before submitting.")
+            continue
+        print(f"  reopened skipped step: {name}")
+        visited.add(name)
+        filler.fill_page(driver.read_page(page))
+        for _ in range(MAX_PAGES):
+            if driver.is_review(page):
+                break
+            driver.next_page(page)
+
+
 def fill_until_review(page, filler: Filler, driver) -> None:
+    visited: set[str] = set()
     for _ in range(MAX_PAGES):
         if driver.is_review(page):
+            revisit_skipped(page, filler, driver, visited)
             # Some sites put questions on the same page as the final Submit (iCIMS); fill
             # them, then stop. A pure review page (Workday) has no questions to fill.
             last = driver.read_page(page)
@@ -49,6 +72,7 @@ def fill_until_review(page, filler: Filler, driver) -> None:
                 filler.fill_page(last)
             return
         snapshot = driver.read_page(page)
+        visited.add(snapshot["step"])
         print(f"  page: {snapshot['step']} ({len(snapshot['fields'])} questions)")
         filler.fill_page(snapshot)
         for attempt in range(RETRIES_PER_PAGE + 1):

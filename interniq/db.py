@@ -245,6 +245,9 @@ def propose_application(conn, posting_id: int, files: list[str], site: str | Non
 
 
 def set_application_state(conn, posting_id: int, state: str) -> None:
+    row = conn.execute("SELECT state FROM applications WHERE posting_id = ?", (posting_id,)).fetchone()
+    if row and row["state"] == "submitted":
+        return  # a late tap on an old card must not undo a submission
     with conn:
         conn.execute("UPDATE applications SET state = ? WHERE posting_id = ?", (state, posting_id))
         if state == "approved":

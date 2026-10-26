@@ -229,7 +229,23 @@ def button_text(b) -> str:
     return (b.inner_text() or b.get_attribute("value") or "").strip()
 
 
+def step_position(page: Page) -> tuple[int, int]:
+    """(current step, total steps) from the iCIMS progress bar; (0, 0) if there is none.
+
+    Steps on AMD: Candidate Profile, Candidate Questions, Job Specific Questions,
+    Portal Specific Forms. Only the last one's Submit sends the application.
+    """
+    items = content(page).locator(".iCIMS_Steps li").all()
+    for index, item in enumerate(items, start=1):
+        if "iCIMS_Steps_Current" in (item.get_attribute("class") or ""):
+            return index, len(items)
+    return 0, len(items)
+
+
 def current_step(page: Page) -> str:
+    current = content(page).locator(".iCIMS_Steps li.iCIMS_Steps_Current")
+    if current.count():
+        return (current.first.get_attribute("title") or "").replace("\xa0", " ").replace("(Current Step)", "").strip()
     heads = content(page).locator("h2:visible").all_inner_texts()
     return heads[0].strip() if heads else ""
 
@@ -328,8 +344,14 @@ def upload(page: Page, field_id: str, path: str) -> str:
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
     file_input = field(page, field_id)
     base = (file_input.get_attribute("id") or "").removesuffix("_File")
-    if name in describe(page, field_id).get("value", ""):
+    if name in describe(page, field_id).get("value", "") or file_input.get_attribute("data-iiq-uploaded") == name:
         return f"ok ({name} is already uploaded)"
+    # One-file fields: a second upload replaces the first (it once replaced the resume with
+    # the cover letter). Refuse instead.
+    earlier = file_input.get_attribute("data-iiq-uploaded")
+    if earlier and file_input.get_attribute("multiple") is None:
+        return (f"this field takes one file and already holds {earlier}; uploading {name} would replace it. "
+                "Not uploaded.")
     replace = frame.locator(f'[id="{base}_Button"]:visible')
     if replace.count():
         replace.first.click()
@@ -343,6 +365,7 @@ def upload(page: Page, field_id: str, path: str) -> str:
     chosen = file_input.evaluate("e => e.files && e.files.length ? e.files[0].name : ''")
     if chosen != name:
         return f"upload didn't take (the file box holds {chosen!r})"
+    file_input.evaluate("(e, n) => e.setAttribute('data-iiq-uploaded', n)", name)
     parsed = " The resume was parsed, which can re-fill profile fields: call read_page and check them." \
         if "resume" in base.lower() else ""
     return f"ok ({name} chosen; it shows on the page after the profile is saved).{parsed}"
@@ -400,9 +423,17 @@ def open_application(page: Page, job_url: str) -> None:
 
 
 def next_page(page: Page) -> str:
-    """Click Next / Save and Continue (never a final Submit). Returns the new step name."""
+    """Move to the next step, never past the final one. Returns the new step name.
+
+    Before the last step, iCIMS labels its continue button "Submit" (or "Update Profile"),
+    so those count as Next there. On the last step this refuses: only submit() may click.
+    """
+    if is_review(page):
+        raise Blocked("Refusing to click on the final step; only an approved submit may")
     before = current_step(page)
-    candidates = [b for b in buttons(content(page)) if NEXT_TEXT.match(button_text(b))]
+    position, total = step_position(page)
+    pattern = NEXT_TEXT if not total else re.compile(f"{NEXT_TEXT.pattern}|{SUBMIT_TEXT.pattern}", re.I)
+    candidates = [b for b in buttons(content(page)) if pattern.match(button_text(b))]
     if not candidates:
         raise Blocked(f"No Next button on {before!r}")
     candidates[-1].click()
@@ -412,7 +443,11 @@ def next_page(page: Page) -> str:
 
 
 def is_review(page: Page) -> bool:
-    """The last page: a final Submit button and no Next button."""
+    """The final step: the progress bar's last step is current (its Submit sends the
+    application). Without a progress bar: a Submit button and no Next button."""
+    position, total = step_position(page)
+    if total:
+        return position == total
     names = [button_text(b) for b in buttons(content(page))]
     return any(SUBMIT_TEXT.match(n) for n in names) and not any(NEXT_TEXT.match(n) for n in names)
 

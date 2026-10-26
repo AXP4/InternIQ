@@ -159,6 +159,21 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     label = f"{posting['org']}, {posting['title']}"  # replaced by the page's own title once it's read
 
     try:
+        filler = Filler(page, driver.SITE, posting, docs, decision["form_term"] if decision else None, driver)
+        filler.screenshot_dir = folder
+        # Sites with a shared profile that the application skips (iCIMS resumes at step 3):
+        # update the profile first so this job gets its own resume.
+        if hasattr(driver, "open_profile") and driver.open_profile(page, url):
+            before = driver.stored_resume(page)
+            print(f"  profile: replacing the stored resume ({before})")
+            filler.fill_page(driver.read_page(page))
+            snap_step(page, filler, "Candidate Profile")
+            result = driver.save_profile(page, before)
+            print(f"  profile saved: {result}")
+            if result.startswith("⚠️"):
+                filler.unsure.append(f"**{result}**")
+            else:
+                filler.uploaded.add("resume")
         driver.open_application(page, url)
         page_title = driver.page_job_title(page)
         label = f"{posting['org']}, {page_title or posting['title']}"
@@ -169,8 +184,6 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
             raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
-        filler = Filler(page, driver.SITE, posting, docs, decision["form_term"] if decision else None, driver)
-        filler.screenshot_dir = folder
         fill_until_review(page, filler, driver)
         expected = {"resume"} | filler.uploaded
         if package.load_summary(posting_id).get("cover_letter"):

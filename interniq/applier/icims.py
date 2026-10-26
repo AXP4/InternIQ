@@ -538,3 +538,44 @@ def open_step(page: Page, name: str) -> bool:
     page.goto(f"{match.group(1)}/{path}", wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     return current_step(page) == name
+
+
+# ---------- the shared candidate profile (step 1, reached directly) ----------
+
+def stored_resume(page: Page) -> str:
+    label = content(page).locator('[id$="Resume_FileNameLabel"]')
+    return label.first.inner_text().strip() if label.count() else ""
+
+
+def open_profile(page: Page, job_url: str) -> bool:
+    """Open the shared Candidate Profile (Dashboard > Update Your Profile).
+
+    Real applications resume at step 3, so this is the only way to give each job its own
+    resume. True when the profile form is open.
+    """
+    target = apply_url(page, job_url)
+    portal_url = portal(target)
+    page.goto(f"{portal_url}/jobs/candidate?back=dashboard", wait_until="domcontentloaded")
+    page.wait_for_timeout(6000)
+    frame = content(page)
+    if frame.locator("#email:visible").count() or frame.locator("#accept_gdpr:visible").count() \
+            or "login.icims.com" in page.url:
+        sign_in(page, portal_url, job_number(target))
+        page.goto(f"{portal_url}/jobs/candidate?back=dashboard", wait_until="domcontentloaded")
+        page.wait_for_timeout(6000)
+    return content(page).locator("#cp_form_submit_i").count() > 0
+
+
+def save_profile(page: Page, before: str) -> str:
+    """Click Update Profile and report whether the stored resume changed."""
+    content(page).locator("#cp_form_submit_i").first.click()
+    page.wait_for_timeout(8000)
+    wait_out_bot_check(page, "saving the profile")
+    errors = sorted({e for e in content(page).evaluate(ERRORS_JS) if "success" not in e.lower()})
+    if errors:
+        raise Blocked(f"AMD wouldn't save the profile: {'; '.join(errors)[:300]}")
+    page.goto(page.url, wait_until="domcontentloaded")  # reload to read the stored file name
+    page.wait_for_timeout(5000)
+    after = stored_resume(page)
+    return f"resume on the profile changed from {before!r} to {after!r}" if after and after != before \
+        else f"⚠️ the stored resume didn't change (still {after or before!r})"

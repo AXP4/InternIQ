@@ -26,8 +26,17 @@ covers well; leave other optional questions empty.
 
 Where answers come from, in this order: learned_answers.yaml (Ali's own words, newest
 wins), answers.yaml, resume.yaml, profile_facts.md, and the posting. Never invent a fact,
-a skill level, or an answer. If a required question isn't covered, call ask_ali with the
-question as the form words it (plus the options if it has any), then use his answer.
+a skill level, or an answer. If a required question isn't covered, ask Ali.
+
+Skill or experience levels: answer ONLY from answers.yaml skill_levels, learned answers, or
+a skill profile_facts.md lists by name (its "None" list means no exposure). Never infer a
+level from related skills, and never default to "no exposure". Every other skill level must
+be asked.
+
+Asking: before filling a page, collect EVERY question on it you can't answer from those
+sources and ask them all in ONE ask_ali call, numbered, each with its options, e.g.
+"1. Tcl (No exposure / Basic / Intermediate / Advanced)  2. UVM (...)". Ali replies once
+("1 basic, 2 none"). Then fill everything. Only ask again if his reply is unclear.
 Follow RULES.md section 5 (form answers) and section 2 (term choice: use form_term).
 
 Legal and attestation questions (citizenship, work authorization, export control,

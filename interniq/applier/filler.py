@@ -56,10 +56,11 @@ How to work:
 - Term questions ("preferred length of your co-op term", start term, ...): pick from the
   options offered in this order: 12 months, then 16, then 8, then 4, with the January 2027
   start when offered (answers.yaml availability). Never answer "none of these".
-- Names on forms are ALWAYS his legal name: first name Ali, last name LEGALNAME (full
-  name "Ali LEGALNAME"), for legal, preferred-last, full, and signature name fields.
-  "Alanizi" appears only on his resume and cover letter, never in a form field. Resume
-  parsers pre-fill "Alanizi": overwrite it. Preferred first name: Ali.
+- Names on forms are his legal name: first name Ali, last name LEGALNAME (full name
+  "Ali LEGALNAME"), for legal, last, full, and signature name fields. Resume parsers
+  pre-fill "Alanizi": overwrite it. Preferred first name: always Ali. The ONLY form field
+  that gets "Alanizi" is one explicitly asking for a preferred last name.
+- Address, city, province, postal code, and country come from answers.yaml contact.
 - Ali's own email and phone go in every field asking for HIS contact details, exactly as in
   answers.yaml. Referral "Source" fields (source email, source phone, referrer) are about
   who referred him: leave them empty unless the answer bank names a referrer.

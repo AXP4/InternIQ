@@ -107,7 +107,8 @@ def check_names(filler: Filler) -> None:
     wrong = [f"{step['step']}: {f.get('label')} = {f.get('value')!r}"
              for step in filler.step_answers for f in step["fields"]
              if f["kind"] != "file" and "alanizi" in (f.get("value") or "").lower()
-             and "linkedin" not in (f.get("value") or "").lower()]
+             and "linkedin" not in (f.get("value") or "").lower()
+             and "preferred" not in (f.get("label") or "").lower()]
     if wrong:
         raise wd.Blocked("A form field has 'Alanizi' instead of the legal name LEGALNAME "
                          "(nothing past this step was saved): " + "; ".join(wrong)[:600])

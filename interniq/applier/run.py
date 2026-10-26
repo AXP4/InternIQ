@@ -11,7 +11,7 @@ import re
 import time
 
 from interniq import browser, db, discord_bot
-from interniq.applier import icims
+from interniq.applier import avature, icims
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
 from interniq.elevate import apply as elevate_apply
@@ -23,7 +23,7 @@ RETRIES_PER_PAGE = 2
 APPROVAL_WAIT_HOURS = 12
 
 # Site name (from the link check) -> the driver module that knows that site's pages.
-DRIVERS = {"workday": wd, "icims": icims}
+DRIVERS = {"workday": wd, "icims": icims, "avature": avature}
 
 
 def documents(posting_id: int) -> dict:
@@ -56,6 +56,7 @@ def revisit_skipped(page, filler: Filler, driver, visited: set[str]) -> None:
         visited.add(name)
         filler.fill_page(driver.read_page(page))
         snap_step(page, filler, name)
+        check_names(filler)
         for _ in range(MAX_PAGES):
             if driver.is_review(page):
                 break
@@ -98,6 +99,20 @@ def answers_report(filler: Filler) -> str:
     return "\n".join(head + lines) + "\n"
 
 
+def check_names(filler: Filler) -> None:
+    """Stop before leaving a step if a form field still holds Ali's resume name. Forms
+    always get his legal name (Ali LEGALNAME); "Alanizi" belongs only on the resume
+    and cover letter. Runs before Next, since leaving a step can save it (EA creates the
+    account when Personal Information is left)."""
+    wrong = [f"{step['step']}: {f.get('label')} = {f.get('value')!r}"
+             for step in filler.step_answers for f in step["fields"]
+             if f["kind"] != "file" and "alanizi" in (f.get("value") or "").lower()
+             and "linkedin" not in (f.get("value") or "").lower()]
+    if wrong:
+        raise wd.Blocked("A form field has 'Alanizi' instead of the legal name LEGALNAME "
+                         "(nothing past this step was saved): " + "; ".join(wrong)[:600])
+
+
 def fill_until_review(page, filler: Filler, driver) -> None:
     visited: set[str] = set()
     for _ in range(MAX_PAGES):
@@ -110,12 +125,14 @@ def fill_until_review(page, filler: Filler, driver) -> None:
                 print(f"  final page: {last['step']} ({len(last['fields'])} questions)")
                 filler.fill_page(last)
                 snap_step(page, filler, last['step'])
+            check_names(filler)
             return
         snapshot = driver.read_page(page)
         visited.add(snapshot["step"])
         print(f"  page: {snapshot['step']} ({len(snapshot['fields'])} questions)")
         filler.fill_page(snapshot)
         snap_step(page, filler, snapshot["step"])
+        check_names(filler)
         for attempt in range(RETRIES_PER_PAGE + 1):
             new_step = driver.next_page(page)
             if new_step != snapshot["step"] or driver.is_review(page):

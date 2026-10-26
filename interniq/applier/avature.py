@@ -258,8 +258,10 @@ def open_application(page: Page, job_url: str) -> None:
     wait_out_bot_check(page, "opening the job page")
     # "AI Engineer Intern - 216236 - Electronic Arts": drop the job number and company.
     _job_title["text"] = re.sub(r"\s+-\s+\d+\s+-\s+.*$", "", page.title()).strip()
-    # Signed out: ApplicationMethods; signed in: ApplicationGeneralInformation.
-    apply = page.locator('a[href*="/careers/Application"]', has_text=re.compile(r"^\s*apply\s*$", re.I))
+    # Signed out: ApplicationMethods; signed in: ApplicationGeneralInformation. A draft
+    # from an earlier run turns the button into "Finish your application".
+    apply = page.locator('a[href*="/careers/Application"]',
+                         has_text=re.compile(r"^\s*(apply|finish your application|continue( application)?)\s*$", re.I))
     if not apply.count():
         raise Blocked("The job page has no Apply link (closed posting?)")
     page.goto(apply.first.get_attribute("href"), wait_until="domcontentloaded")

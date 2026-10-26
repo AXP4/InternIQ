@@ -128,6 +128,8 @@ class Filler:
         self.unsure: list[str] = []
         self.uploaded: set[str] = set()  # documents whose upload showed up in the field
         self.attempted: set[str] = set()  # documents Claude tried to upload (found a slot for)
+        self.screenshot_dir = None  # set by the run: where step screenshots go
+        self.step_shots: list = []
         self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
         notes = db.site_notes(db.connect(), site)
         text = "\n\n".join([

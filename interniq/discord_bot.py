@@ -271,13 +271,18 @@ def approval_card(posting_id: int) -> Card:
     for item in run_notes.get("unsure", []):
         head.append(f"❔ {item}")
     if run_notes.get("screenshot"):
-        head.append("📸 The Review page screenshot is attached; the browser stays open on it until you decide.")
+        head.append("📸 Screenshots of every filled step are attached. Nothing is sent until you tap Submit; "
+                    "the browser stays open on the last step until you decide.")
     if summary.get("feedback"):
         head.append(f"Your fixes so far: {' | '.join(summary['feedback'])}")
     folder = package.OUTPUT_DIR / str(posting_id)
     files = [folder / name for name in summary["files"]] if "files" in summary else sorted(folder.glob("*.pdf"))
-    if run_notes.get("screenshot") and (folder / run_notes["screenshot"]).exists():
-        files.append(folder / run_notes["screenshot"])
+    # Every filled step (sites without a review page send from the last step), else the
+    # single Review screenshot. Discord allows 10 files per message.
+    shots = [folder / name for name in run_notes.get("step_shots", []) if (folder / name).exists()]
+    if not shots and run_notes.get("screenshot") and (folder / run_notes["screenshot"]).exists():
+        shots = [folder / run_notes["screenshot"]]
+    files = (files + shots)[:10]
     tail = [f"Attached: {', '.join(p.name for p in files)}"]
     if posting.get("link"):
         tail.append(f"<{posting['link']}>")

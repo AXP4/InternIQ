@@ -7,6 +7,7 @@ Dry run: fill a decoy job, screenshot its Review page to #log, never submit.
 """
 
 import json
+import re
 import time
 
 from interniq import browser, db, discord_bot
@@ -53,10 +54,21 @@ def revisit_skipped(page, filler: Filler, driver, visited: set[str]) -> None:
         print(f"  reopened skipped step: {name}")
         visited.add(name)
         filler.fill_page(driver.read_page(page))
+        snap_step(page, filler, name)
         for _ in range(MAX_PAGES):
             if driver.is_review(page):
                 break
             driver.next_page(page)
+
+
+def snap_step(page, filler: Filler, name: str) -> None:
+    """Screenshot a step right after it's filled. Sites without a review page (iCIMS) send
+    the application from the last step, so these are Ali's only full view of his answers."""
+    folder = filler.screenshot_dir
+    if folder:
+        path = folder / f"step{len(filler.step_shots) + 1}_{re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')}.png"
+        page.screenshot(path=str(path), full_page=True)
+        filler.step_shots.append(path)
 
 
 def fill_until_review(page, filler: Filler, driver) -> None:
@@ -70,11 +82,13 @@ def fill_until_review(page, filler: Filler, driver) -> None:
             if last["fields"]:
                 print(f"  final page: {last['step']} ({len(last['fields'])} questions)")
                 filler.fill_page(last)
+                snap_step(page, filler, last['step'])
             return
         snapshot = driver.read_page(page)
         visited.add(snapshot["step"])
         print(f"  page: {snapshot['step']} ({len(snapshot['fields'])} questions)")
         filler.fill_page(snapshot)
+        snap_step(page, filler, snapshot["step"])
         for attempt in range(RETRIES_PER_PAGE + 1):
             new_step = driver.next_page(page)
             if new_step != snapshot["step"] or driver.is_review(page):
@@ -130,6 +144,7 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
         filler = Filler(page, driver.SITE, posting, docs, decision["form_term"] if decision else None, driver)
+        filler.screenshot_dir = folder
         fill_until_review(page, filler, driver)
         expected = {"resume"} | filler.uploaded
         if package.load_summary(posting_id).get("cover_letter"):
@@ -151,7 +166,8 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         raise
 
     notes = {"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name, "page_title": page_title,
-             "files_expected": expected_names, "files_missing": missing, "files_no_slot": no_slot}
+             "files_expected": expected_names, "files_missing": missing, "files_no_slot": no_slot,
+             "step_shots": [p.name for p in filler.step_shots]}
     if dry:
         card = discord_bot.Card(
             f"🧪 **Dry run reached Review** for {label}\n{url}\n"

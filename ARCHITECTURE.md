@@ -133,6 +133,10 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   Application" so it gets better over time.
 - Commands: `dryrun <id> <url>` (fill a decoy job on the same site, stop at Review),
   `apply <ids...>`, `intend <id>`.
+- **Accumulate Online** postings (`elevate/apply.py`): no employer site. The tailored PDFs
+  go into Ali's Elevate document library, the APPLY form gets a custom package built from
+  them, and Submit Application is pressed only after approval, then confirmed in Elevate's
+  Application Submitted list. `apply <ids...>` picks this path from the posting's procedure.
 - **Employer Email** postings: draft the email with attachments and send it to Ali for
   approval (send automatically only if Outlook API access works).
 

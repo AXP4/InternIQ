@@ -150,8 +150,17 @@ with something Ali can run and see working.
   - Bug found live: a late Submit tap on an old card reset a submitted application to
     approved. Submitted rows are now final.
 - Employer Email postings: draft emails for approval.
-- "Accumulate Online" postings (14 in the first crawl): apply inside Elevate itself, same
-  approval flow. Left for the end by Ali's decision, along with other odd cases.
+- ✅ "Accumulate Online" postings: apply inside Elevate itself (`elevate/apply.py`), same
+  approval flow. Moved ahead of the other sites because of deadlines; 7 submitted on
+  2026-10-26 with Ali approving each.
+  - APPLY only opens the package form. Tailored PDFs are uploaded to Ali's Elevate document
+    library (`Ali_Alanizi_Resume_<id>`), then a custom package is built from them.
+  - No Claude loop: the form is always the same few dropdowns.
+  - After approval the form is rebuilt from scratch (the session may expire while Ali
+    decides), compared with what he approved, then submitted and confirmed in the
+    Application Submitted list.
+  - Postings that want everything "in one document" get one merged PDF (letter, resume,
+    transcript). The transcript is AES encrypted, hence the `cryptography` dependency.
 - **Done when:** every ATS seen in the current ENSF backlog is handled or cleanly
   handed to Ali.
 

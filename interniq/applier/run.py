@@ -205,10 +205,9 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
         fill_until_review(page, filler, driver)
-        if getattr(driver, "SUBMIT_FILLS_PAGES", False):
-            filler.unsure.append("**Submit sends it.** This site's last step has more pages after this one "
-                                 "(voluntary self-disclosure and similar). After your tap they're filled from "
-                                 "your answers (or asked in #questions) and the application is sent.")
+        if hasattr(driver, "after_submit_page"):
+            filler.unsure.append("Submit presses this page's button once. If the site shows another page "
+                                 "instead of a confirmation, you'll get an Approval 2 card for it first.")
         expected = {"resume"} | filler.uploaded
         if package.load_summary(posting_id).get("cover_letter"):
             expected.add("cover_letter")
@@ -253,9 +252,32 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     print("  posting the approval card; keeping the Review page open until Ali decides")
     if wait_for_decision(page, conn, posting_id, label, notes) != "approved":
         return
-    if getattr(driver, "SUBMIT_FILLS_PAGES", False):  # pages after the card (EA's EEO step)
-        confirmed = driver.submit(page, posting_id, filler)
-    else:
+    confirmed = driver.submit(page, posting_id)
+    # Some sites (EA) show another page after the press that was supposed to send it.
+    # Each surprise page is filled (asking Ali when the bank has no answer) and gets its
+    # own approval card before anything is pressed again.
+    for round_number in range(2, MAX_PAGES):
+        if confirmed or not hasattr(driver, "after_submit_page"):
+            break
+        snapshot = driver.after_submit_page(page)
+        if snapshot is None:  # nothing left to fill: the site's own list decides
+            confirmed = driver.confirmed_elsewhere(page)
+            break
+        print(f"  another page after Submit: {snapshot['step'] or '(no step name)'} "
+              f"({len(snapshot['fields'])} questions); approval {round_number} needed")
+        filler.legal, filler.unsure = [], []
+        filler.fill_page(snapshot)
+        snap_step(page, filler, f"after approval {round_number - 1}")
+        check_names(filler)
+        filler.unsure.insert(0, f"**Approval {round_number}:** the page after your last Submit wasn't the final "
+                                "one. These answers are new; nothing was pressed after filling them.")
+        shot = folder / f"approval{round_number}.png"
+        page.screenshot(path=str(shot), full_page=True)
+        report.write_text(answers_report(filler), encoding="utf-8")
+        notes.update({"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name,
+                      "step_shots": [p.name for p in filler.step_shots[-9:]]})
+        if wait_for_decision(page, conn, posting_id, f"{label} (approval {round_number})", notes) != "approved":
+            return
         confirmed = driver.submit(page, posting_id)
     confirm_shot = shot.with_name("submitted.png")
     page.screenshot(path=str(confirm_shot), full_page=True)

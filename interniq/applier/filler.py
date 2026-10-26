@@ -138,7 +138,6 @@ class Filler:
         self.legal: list[dict] = []
         self.unsure: list[str] = []
         self.uploaded: set[str] = set()  # documents whose upload showed up in the field
-        self.after_approval = False  # pages filled after Ali's tap (EA's final step) re-ask legal items
         self.attempted: set[str] = set()  # documents Claude tried to upload (found a slot for)
         self.screenshot_dir = None  # set by the run: where step screenshots go
         self.step_shots: list = []
@@ -219,10 +218,6 @@ class Filler:
                 f"Page now:\n{compact(snapshot)}")
         if problems:
             text += "\n\nThe site refused to continue because of these errors; fix them:\n- " + "\n- ".join(problems)
-        if self.after_approval:
-            text += ("\n\nThis page appeared AFTER Ali approved the card, so he hasn't seen its legal questions. "
-                     "Ask Ali about EVERY legal or attestation question on it (one bundled ask_ali, with the "
-                     "answer you'd give from the bank), even when the answer bank covers it.")
         self.asked_this_page = False
         messages = [{"role": "user", "content": text}]
         for _ in range(MAX_TURNS):

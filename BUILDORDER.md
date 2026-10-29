@@ -160,6 +160,19 @@ with something Ali can run and see working.
     press. EA confirms nothing on the page, so the account's Job Applications list decides.
   - Safety added from live runs: form name fields always get the legal name (a check stops
     before Next otherwise), parser-filled skill tags are replaced with profile facts only.
+- ✅ **Eightfold** (`applier/eightfold.py`), tested on Lockheed Martin: 1 application.
+  One page, no account; comboboxes are opened once to list their options; Lockheed's
+  privacy popup is accepted (Ali approved, listed on the card); the typed legal-name
+  signature is the statement of agreement.
+- ✅ **Greenhouse** (`applier/greenhouse.py`), tested on Astera Labs: 4 applications.
+  Built on the Eightfold helpers (react-select dropdowns read from the displayed value).
+  The emailed security code is 8 one-character boxes, shown as one field and filled
+  through Approval 2 with the code Ali pastes; codes are never saved as answers.
+- Job title check: term words (Fall, Spring, years) must match exactly, so a sibling
+  posting for another term is refused; "Co-op" and "Coop" count as the same word.
+- **Elevate block (2026-10-28):** Cloudflare blocked the agent's browser on Elevate's login.
+  Nothing works around it: all Elevate work stops until Ali runs `unblock`, and "I intend
+  to apply" clicks queue up and run in one visit with `intend`.
 - Employer Email postings: draft emails for approval (Terra Sense was sent by Ali by hand
   from a drafted text).
 - ✅ "Accumulate Online" postings: apply inside Elevate itself (`elevate/apply.py`), same

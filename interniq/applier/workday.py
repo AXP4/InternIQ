@@ -113,8 +113,14 @@ def page_job_title(page: Page) -> str:
 def titles_match(posting_title: str, page_title: str) -> bool:
     """True when the page is the same job: nearly all words of the posting's title (without
     Elevate's program codes) appear in the page's title."""
-    wanted = set(words(clean_title(posting_title)).split())
-    have = set(words(page_title).split())
+    same = lambda t: re.sub(r"\bco[\s-]?op\b", "coop", t or "", flags=re.I)  # Co-op = Coop = co op
+    wanted = set(words(same(clean_title(posting_title))).split())
+    have = set(words(same(page_title)).split())
+    # Words that tell sibling postings apart (the Fall and the Spring co-op of the same
+    # job) must all match; the 80% rule alone let "Fall" match a "Spring" page.
+    key = re.compile(r"^(fall|spring|summer|winter|autumn|\d+)$")
+    if {w for w in wanted if key.match(w)} - have or {w for w in have if key.match(w)} - wanted:
+        return False
     return bool(wanted) and len(wanted & have) >= 0.8 * len(wanted)
 
 

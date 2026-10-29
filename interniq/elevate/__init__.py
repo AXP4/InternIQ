@@ -5,7 +5,7 @@ import re
 JOBS_URL = "https://elevate.ucalgary.ca/myAccount/engineering/jobs-engineering.htm"
 
 # Program codes Elevate appends to titles, e.g. "Rendering Engineer Intern -ENSF ENEL".
-PROGRAM_CODES = re.compile(r"\s*-\s*(ALL|EN[A-Z]{2,3}(-AOS)?)(\s+\(?EN[A-Z]{2,3}(-AOS)?\)?)*\s*$")
+PROGRAM_CODES = re.compile(r"\s*-\s*(ALL|EN[A-Z]{1,3}(-AOS)?)(\s+\(?EN[A-Z]{1,3}(-AOS)?\)?)*\s*$")
 
 
 def clean_title(title: str) -> str:

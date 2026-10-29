@@ -327,7 +327,13 @@ class ApprovalButton(discord.ui.DynamicItem[discord.ui.Button],
             await interaction.response.send_modal(FixModal(self.posting_id))
             return
         conn = db.connect()
-        if self.action == "submit":
+        app = db.get_application(conn, self.posting_id)
+        if self.action == "submit" and app and app["site"] == "email" and app["state"] != "submitted":
+            # Email applications are sent by Ali himself; Submit means "I sent it".
+            db.mark_submitted(conn, self.posting_id)
+            result = ("📨 **Recorded as sent.** Elevate \"I intend to apply\" is queued: "
+                      "`python -m interniq intend` (after `unblock` while Elevate is blocked).")
+        elif self.action == "submit":
             db.set_application_state(conn, self.posting_id, "approved")
             result = "✅ **Approved.** It will be submitted when the applier runs."
         else:

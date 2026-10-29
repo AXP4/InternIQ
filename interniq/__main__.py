@@ -151,6 +151,15 @@ def intend(posting_id: str = "") -> None:
             print("\n".join(intent.express_all(context)))
 
 
+def email(*posting_ids: str) -> None:
+    """Draft email applications and post them as cards; Ali sends them from his Outlook."""
+    from interniq.applier import email_apply
+
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq email <posting id> [more ids]")
+    email_apply.run_email([int(p) for p in posting_ids])
+
+
 def unblock() -> None:
     """Allow the agent back on Elevate after a security block (only when Ali says so)."""
     from interniq import db
@@ -177,6 +186,7 @@ COMMANDS = {
     "dryrun": dryrun,
     "apply": apply,
     "intend": intend,
+    "email": email,
     "unblock": unblock,
     "bot": bot,
 }

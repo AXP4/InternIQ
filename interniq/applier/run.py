@@ -11,7 +11,7 @@ import re
 import time
 
 from interniq import browser, db, discord_bot
-from interniq.applier import avature, icims
+from interniq.applier import avature, eightfold, icims
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
 from interniq.elevate import apply as elevate_apply
@@ -23,7 +23,7 @@ RETRIES_PER_PAGE = 2
 APPROVAL_WAIT_HOURS = 12
 
 # Site name (from the link check) -> the driver module that knows that site's pages.
-DRIVERS = {"workday": wd, "icims": icims, "avature": avature}
+DRIVERS = {"workday": wd, "icims": icims, "avature": avature, "eightfold": eightfold}
 
 
 def documents(posting_id: int) -> dict:

@@ -52,7 +52,11 @@ READ_FIELDS_JS = r"""
       f.label = 'Resume/CV';
       f.value = text(box).slice(0, 200);
     } else if (el.getAttribute('role') === 'combobox') {
-      f.kind = 'select'; f.value = el.value; f.list = el.getAttribute('aria-controls');
+      // Eightfold keeps the choice in the input; react-select (Greenhouse) clears the input
+      // and shows the choice in a separate "single value" element.
+      const ctl = el.closest('[class*="control"]');
+      const shown = ctl && ctl.querySelector('[class*="single-value"], [class*="singleValue"]');
+      f.kind = 'select'; f.value = el.value || text(shown); f.list = el.getAttribute('aria-controls');
     } else if (el.tagName === 'SELECT') {
       f.kind = 'select'; f.value = el.selectedIndex >= 0 ? el.options[el.selectedIndex].text.trim() : '';
       f.options = [...el.options].map(o => o.text.trim()).filter(Boolean);
@@ -153,7 +157,7 @@ def select_option(page: Page, field_id: str, value: str) -> str:
         return f"no option matches {value!r}; options are: {names[:60]}"
     options[names.index(choice)].click()
     page.wait_for_timeout(800)
-    got = box.input_value()
+    got = describe(page, field_id).get("value", "")
     return f"ok (selected {choice!r})" if got.strip() == choice else f"selection didn't stick (shows {got!r})"
 
 

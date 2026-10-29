@@ -62,7 +62,7 @@ def select_search(page: Page, field_id: str, value: str) -> str:
         return f"no result matches {value!r}; results are: {names[:30]}"
     options[names.index(choice)].click()
     page.wait_for_timeout(800)
-    shown = box.evaluate("e => (e.closest('.select__control') || e.parentElement).innerText.trim()")
+    shown = describe(page, field_id).get("value", "")
     return f"ok (selected {choice!r})" if choice in shown else f"selection didn't stick (shows {shown!r})"
 
 

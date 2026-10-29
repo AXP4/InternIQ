@@ -66,3 +66,30 @@ def express_intent(context: BrowserContext, posting_id: int, via: int | None = N
         db.set_elevate_status(conn, posting_id, APPLIED)
         return "clicked; Elevate now shows Expressed Intention to Apply"
     return f"clicked, but the list shows {status!r}; check it by hand"
+
+
+def pending(conn) -> list[tuple[int, int]]:
+    """(posting, submitted application) pairs still missing "I intend to apply": submitted
+    postings and the duplicate listings of them."""
+    done = {APPLIED, "Application Submitted"}  # applied inside Elevate needs no intent click
+    rows = conn.execute("SELECT id, elevate_status FROM postings WHERE status = 'submitted'").fetchall()
+    out = [(r["id"], r["id"]) for r in rows if r["elevate_status"] not in done]
+    for r in rows:
+        for d in conn.execute(
+                "SELECT p.id, p.elevate_status FROM decisions d JOIN postings p ON p.id = d.posting_id "
+                "WHERE p.status = 'duplicate' AND d.reason LIKE ?", (f"%Duplicate of {r['id']}%",)):
+            if d["elevate_status"] not in done:
+                out.append((d["id"], r["id"]))
+    return out
+
+
+def express_all(context: BrowserContext) -> list[str]:
+    """Every pending click in one Elevate visit; stops at the first block."""
+    lines = []
+    for posting_id, via in pending(db.connect()):
+        try:
+            lines.append(f"{posting_id}: {express_intent(context, posting_id, via=via)}")
+        except crawler.ElevateBlocked as e:
+            lines.append(f"⛔ stopped: {e}")
+            break
+    return lines or ["nothing pending"]

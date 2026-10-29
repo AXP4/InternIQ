@@ -15,7 +15,7 @@ from interniq.applier import avature, eightfold, icims
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
 from interniq.elevate import apply as elevate_apply
-from interniq.elevate import intent
+from interniq.elevate import crawler, intent
 from interniq.writer import package
 
 MAX_PAGES = 12
@@ -154,11 +154,18 @@ def duplicates_of(conn, posting_id: int) -> list[int]:
 
 
 def after_submit(context, conn, posting_id: int) -> str:
-    """Elevate "I intend to apply" for the posting and any duplicate listing of it."""
+    """Elevate "I intend to apply" for the posting and any duplicate listing of it. While
+    Elevate is blocked the clicks wait: `python -m interniq intend` does every pending one
+    in a single Elevate visit once Ali has run `unblock`."""
+    if db.get_setting(conn, "elevate_blocked", ""):
+        return "Elevate 'I intend to apply': queued (Elevate is blocked); `python -m interniq intend` after `unblock`."
     lines = []
     for pid in [posting_id] + duplicates_of(conn, posting_id):
         try:
             lines.append(f"Elevate 'I intend to apply' ({pid}): {intent.express_intent(context, pid, via=posting_id)}")
+        except crawler.ElevateBlocked:
+            lines.append(f"⛔ Elevate blocked the browser; 'I intend to apply' ({pid}) is queued for later.")
+            break
         except Exception as e:  # never let this hide a successful submit
             lines.append(f"⚠️ Elevate 'I intend to apply' ({pid}) failed ({e}); click it by hand.")
     return "\n".join(lines)

@@ -140,14 +140,15 @@ def apply(*posting_ids: str) -> None:
 
 
 def intend(posting_id: str = "") -> None:
-    """Click "I intend to apply" on Elevate for an application that's already submitted."""
+    """Click "I intend to apply" on Elevate: for one submitted posting, or (no id) every pending one."""
     from interniq import browser
     from interniq.elevate import intent
 
-    if not posting_id:
-        raise SystemExit("Usage: python -m interniq intend <posting id>")
     with browser.open_browser() as context:
-        print(intent.express_intent(context, int(posting_id)))
+        if posting_id:
+            print(intent.express_intent(context, int(posting_id)))
+        else:  # every submitted application still missing the click, in one visit
+            print("\n".join(intent.express_all(context)))
 
 
 def unblock() -> None:

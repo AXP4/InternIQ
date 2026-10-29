@@ -98,7 +98,7 @@ def ensure_logged_in(page: Page) -> None:
 BLOCKED_TEXT = ["you have been blocked", "attention required", "access denied", "too many requests"]
 
 
-class ElevateBlocked(SystemExit):
+class ElevateBlocked(RuntimeError):
     """A security block on Elevate. Never retried or worked around: everything stops and
     Ali decides when (and whether) the agent touches Elevate again."""
 

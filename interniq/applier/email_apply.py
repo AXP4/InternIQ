@@ -26,11 +26,17 @@ Rules:
 - Body: a greeting, 2 or 3 short paragraphs, then the signature. Say the documents are
   attached, one sentence on why this role (taken from the cover letter), and the availability
   sentence "I'm available starting January 2027." Never state a term length.
-- Claim nothing that isn't in the cover letter or the facts given.
+- No contractions anywhere (Ali's preference): write "I am", "I would", "I have", "do not",
+  "it is", never "I'm", "I'd", "I've", "don't", "it's".
+- One closing line before the signature (for example "Thank you for your time."), never two.
+- Claim nothing that is not in the cover letter or the facts given.
 - Signature lines, exactly: "Ali Alanizi", "PHONE_REMOVED", "EMAIL_REMOVED".
 Return JSON: {"subject": "...", "body": "..."}"""
 
 DASHES = re.compile(r"[-‐-―]")
+# I'm, I'd, I've, I'll, we're, don't, it's, that's... (possessives like "SeisWare's" are fine)
+CONTRACTIONS = re.compile(r"\b(?:\w+n['’]t|I['’](?:m|d|ve|ll)|\w+['’](?:re|ve|ll|d)|"
+                          r"(?:it|that|there|here|what|who|he|she|let)['’]s)\b", re.I)
 
 
 def compose(posting: dict, summary: dict) -> dict:
@@ -44,10 +50,15 @@ def compose(posting: dict, summary: dict) -> dict:
         text = next(b.text for b in response.content if b.type == "text")  # skip thinking blocks
         draft = json.loads(text[text.find("{"): text.rfind("}") + 1])
         visible = draft["subject"] + draft["body"].replace("EMAIL_REMOVED", "")
-        if not DASHES.search(visible):
+        problems = []
+        if DASHES.search(visible):
+            problems.append("a dash or hyphen")
+        if found := CONTRACTIONS.findall(visible):
+            problems.append(f"contractions ({', '.join(sorted(set(found)))})")
+        if not problems:
             return draft
-        prompt += "\n\nYour last draft had a dash or hyphen. Rewrite it without any."
-    raise RuntimeError("The email kept coming out with dashes; write it by hand")
+        prompt += f"\n\nYour last draft had {' and '.join(problems)}. Rewrite it without any."
+    raise RuntimeError("The email kept breaking the dash or contraction rule; write it by hand")
 
 
 def card(posting: dict, draft: dict, files: list) -> discord_bot.Card:

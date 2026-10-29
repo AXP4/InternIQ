@@ -4,7 +4,6 @@ Read only. It clicks login links, the ENSF Jobs quick search, and job titles.
 It never clicks Apply, Shortlist, Not Interested, or "I intend to apply".
 """
 
-import asyncio
 import re
 from datetime import datetime
 
@@ -75,19 +74,44 @@ def ensure_logged_in(page: Page) -> None:
     Microsoft usually remembers Ali, so one click is enough. If it asks for a
     password or 2FA, ping Ali on Discord and wait for him in the open window.
     """
+    if db.get_setting(db.connect(), "elevate_blocked", ""):
+        raise ElevateBlocked("Elevate blocked the browser earlier; run `python -m interniq unblock` once Ali "
+                             "says it's OK to use Elevate again")
     page.goto(JOBS_URL)
+    stop_if_blocked(page)
     if "/myAccount/" in page.url:
         return
     page.get_by_role("link", name="Student Login").click()
     try:
         page.wait_for_url("**/myAccount/**", timeout=30_000)
     except PlaywrightTimeout:
-        asyncio.run(discord_bot.send(
+        stop_if_blocked(page)
+        discord_bot.call(discord_bot.send(
             "DISCORD_QUESTIONS_CHANNEL_ID", "Log in to Elevate in the InternIQ browser window"
         ))
         page.wait_for_url("**/myAccount/**", timeout=LOGIN_WAIT_MS)
     browser.pause()
     page.goto(JOBS_URL)
+    stop_if_blocked(page)
+
+
+BLOCKED_TEXT = ["you have been blocked", "attention required", "access denied", "too many requests"]
+
+
+class ElevateBlocked(SystemExit):
+    """A security block on Elevate. Never retried or worked around: everything stops and
+    Ali decides when (and whether) the agent touches Elevate again."""
+
+
+def stop_if_blocked(page: Page) -> None:
+    text = page.locator("body").inner_text().lower()[:3000]
+    if any(phrase in text for phrase in BLOCKED_TEXT) or "attention required" in page.title().lower():
+        db.set_setting(db.connect(), "elevate_blocked", page.url[:200])
+        discord_bot.call(discord_bot.send(
+            "DISCORD_QUESTIONS_CHANNEL_ID",
+            "⛔ Elevate's security service blocked the InternIQ browser. I stopped everything on Elevate "
+            "and won't retry. Nothing else will run on Elevate until you clear it with `python -m interniq unblock`."))
+        raise ElevateBlocked("Elevate blocked the browser; stopped (no retries)")
 
 
 def open_quick_search(page: Page) -> list[dict]:

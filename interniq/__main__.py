@@ -150,6 +150,16 @@ def intend(posting_id: str = "") -> None:
         print(intent.express_intent(context, int(posting_id)))
 
 
+def unblock() -> None:
+    """Allow the agent back on Elevate after a security block (only when Ali says so)."""
+    from interniq import db
+
+    conn = db.connect()
+    print(f"Elevate was blocked at: {db.get_setting(conn, 'elevate_blocked', '') or '(not blocked)'}")
+    db.set_setting(conn, "elevate_blocked", "")
+    print("Cleared. The next Elevate action will try once; a new block stops everything again.")
+
+
 def bot() -> None:
     """Keep the Discord bot online to answer commands (Ctrl+C to stop)."""
     discord_bot.run()
@@ -166,6 +176,7 @@ COMMANDS = {
     "dryrun": dryrun,
     "apply": apply,
     "intend": intend,
+    "unblock": unblock,
     "bot": bot,
 }
 

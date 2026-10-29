@@ -5,6 +5,7 @@ config/answers.yaml is Ali's file and is never rewritten by code. Answers he giv
 Both files are gitignored.
 """
 
+import re
 from datetime import datetime
 
 import yaml
@@ -23,7 +24,10 @@ def bank_text() -> str:
 
 
 def learn(question: str, answer: str, posting_id: int | None) -> None:
-    """Append one answer (appending keeps any comments Ali adds to the file)."""
+    """Append one answer (appending keeps any comments Ali adds to the file). One-time
+    codes (emailed security or verification codes) are never kept: they'd be wrong next time."""
+    if re.search(r"security code|verification code|one[- ]time|\bOTP\b|passcode", question, re.I):
+        return
     entry = [{"question": question, "answer": answer, "posting_id": posting_id,
               "saved_at": datetime.now().isoformat(timespec="seconds")}]
     with open(LEARNED, "a", encoding="utf-8") as f:

@@ -21,6 +21,7 @@ SUBMIT_TEXT = re.compile(r"^submit application$", re.I)
 SUBMITTED_TEXT = ["thank you for applying", "application has been submitted", "application was submitted",
                   "successfully submitted", "we have received your application", "thanks for applying"]
 _job_title = {"text": ""}
+_uploaded: list[str] = []  # the one resume this application holds (reset per application)
 
 READ_FIELDS_JS = r"""
 () => {
@@ -195,17 +196,39 @@ def set_date(page: Page, field_id: str, month: str = "", year: str = "", day: st
 def upload(page: Page, field_id: str, path: str) -> str:
     """Upload the resume; Eightfold parses it and pre-fills contact fields."""
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
-    box = field(page, field_id)
-    if box.get_attribute("data-iiq-uploaded"):
-        return f"this field already holds {box.get_attribute('data-iiq-uploaded')}; not uploading {name}"
+    if _uploaded:
+        return f"the resume field already holds {_uploaded[0]}; not uploading {name} (it would replace it)"
+    # The page rebuilds its file box as it re-renders, so find it fresh instead of by id.
+    box = page.locator('input[type="file"]').first
     box.set_input_files(path)
+    agreed = accept_privacy_notice(page)
+    stem = name.rsplit(".", 1)[0]
     for _ in range(15):  # parsing takes a few seconds
         page.wait_for_timeout(2000)
-        if name in page.locator("body").inner_text():
-            box.evaluate("(e, n) => e.setAttribute('data-iiq-uploaded', n)", name)
+        if stem in page.locator("body").inner_text():
+            _uploaded.append(name)
+            note = (" Lockheed's Privacy Notice and Security Agreement popup appeared and I Agree was clicked "
+                    "(Ali pre-approved it): call record_legal for it so it shows on the card.") if agreed else ""
             return (f"ok ({name} uploaded). The resume was parsed, which can re-fill contact fields: "
-                    "call read_page and check them.")
-    return "upload didn't show up on the page"
+                    f"call read_page and check them.{note}")
+    return "upload didn't show up on the page; do NOT upload again, call record_unsure instead"
+
+
+PRIVACY_TITLE = re.compile(r"privacy notice", re.I)
+
+
+def accept_privacy_notice(page: Page) -> bool:
+    """Lockheed only takes the resume after its Privacy Notice and Security Agreement
+    popup is accepted. Ali approved clicking I Agree on that popup (and only that one);
+    it's listed on the approval card as a legal item."""
+    for _ in range(10):
+        page.wait_for_timeout(1000)
+        dialog = page.locator('[role="dialog"]').filter(visible=True).filter(has_text=PRIVACY_TITLE)
+        if dialog.count():
+            dialog.first.get_by_role("button", name=re.compile(r"^\s*i agree\s*$", re.I)).click()
+            page.wait_for_timeout(1500)
+            return True
+    return False
 
 
 def press_add(page: Page, button_id: str) -> str:
@@ -215,6 +238,7 @@ def press_add(page: Page, button_id: str) -> str:
 # ---------- moving through the application ----------
 
 def open_application(page: Page, job_url: str) -> None:
+    _uploaded.clear()
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")

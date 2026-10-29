@@ -25,26 +25,67 @@ _job_title = {"text": ""}
 _uploaded: list[str] = []
 
 # Shared with Eightfold: same field tagging, same combobox handling.
-field, describe, fill_text, select_option = ef.field, ef.describe, ef.fill_text, ef.select_option
+field, describe, select_option = ef.field, ef.describe, ef.select_option
 choose_radio, set_checkbox, set_date, press_add = ef.choose_radio, ef.set_checkbox, ef.set_date, ef.press_add
+
+
+CODE_ID = "security_code"
+_options: dict[str, list[str]] = {}  # dropdown options, read once per application
+
+
+def code_boxes(page: Page) -> list:
+    """The emailed security code's one-character boxes (shown to Claude as one field)."""
+    return [b for b in page.locator('input[maxlength="1"]').all() if b.is_visible()]
 
 
 def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
+    raw = page.evaluate(ef.READ_FIELDS_JS)  # tags every field, the code boxes included
+    boxes = code_boxes(page)
+    box_ids = {b.get_attribute("data-iiq") for b in boxes}
     fields = []
-    for f in page.evaluate(ef.READ_FIELDS_JS):
+    for f in raw:
+        if f["id"] in box_ids:
+            continue  # one of the code boxes; listed once below as a single field
         if f["kind"] == "text" and not f["label"].strip():
             continue  # react-select's hidden helper input next to each dropdown
         if f["kind"] == "select" and "options" not in f:
-            options = ef.combobox_options(page, f["id"])
+            # Opening a dropdown moves the focus, so each one is read only once.
+            if f["id"] not in _options:
+                _options[f["id"]] = ef.combobox_options(page, f["id"])
+            options = _options[f["id"]]
             # Long lists (School, Discipline) load as you type: say so instead of listing 60.
             f["options"] = options[:40]
             if len(options) > 40 or not options:
                 f["note"] = "searchable: use select_search with the wanted text"
         f.pop("list", None)
         fields.append(f)
+    if boxes:
+        fields.append({"id": CODE_ID, "kind": "text", "required": True,
+                       "label": f"Security code ({len(boxes)} characters, emailed to Ali)",
+                       "value": "".join(b.input_value() for b in boxes),
+                       "note": "fill_text with the whole code at once"})
     return {"step": "Application", "fields": fields, "add_buttons": [],
             "errors": sorted(set(page.evaluate(ef.ERRORS_JS)))}
+
+
+def fill_text(page: Page, field_id: str, value: str) -> str:
+    if field_id != CODE_ID:
+        return ef.fill_text(page, field_id, value)
+    boxes = code_boxes(page)
+    code = re.sub(r"\s", "", value)
+    if len(code) != len(boxes):
+        return f"the code needs {len(boxes)} characters, got {len(code)}"
+    for b in boxes:
+        b.fill("")
+    boxes[0].click()
+    page.keyboard.type(code, delay=120)  # each box moves the focus to the next one
+    got = "".join(b.input_value() for b in code_boxes(page))
+    if got != code:  # the page didn't advance by itself: one character per box
+        for b, ch in zip(code_boxes(page), code):
+            b.fill(ch)
+        got = "".join(b.input_value() for b in code_boxes(page))
+    return "ok" if got == code else f"the code boxes show {got!r}, not {code!r}"
 
 
 def select_search(page: Page, field_id: str, value: str) -> str:
@@ -85,6 +126,7 @@ def upload(page: Page, field_id: str, path: str) -> str:
 def open_application(page: Page, job_url: str) -> None:
     """The form is on the job page; the h1 is the job title."""
     _uploaded.clear()
+    _options.clear()
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")
@@ -141,7 +183,7 @@ def after_submit_page(page: Page) -> dict | None:
     """After a press without a confirmation: a security code box (some boards email one)
     goes to Approval 2; form errors stop the run (nothing was sent)."""
     snapshot = read_page(page)
-    code_box = [f for f in snapshot["fields"] if re.search(r"code", f["label"], re.I)]
+    code_box = [f for f in snapshot["fields"] if f["id"] == CODE_ID]
     if code_box:
         return {**snapshot, "fields": code_box}
     if snapshot["errors"] and is_review(page):

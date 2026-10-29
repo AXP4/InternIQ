@@ -18,7 +18,7 @@ from interniq.applier.workday import Blocked, best_option, wait_out_bot_check
 SITE = "eightfold"
 SHOWS_FILES_ON_REVIEW = True  # the uploaded resume's name shows in the Resume/CV section
 SUBMIT_TEXT = re.compile(r"^submit application$", re.I)
-SUBMITTED_TEXT = ["thank you for applying", "application has been submitted", "application was submitted",
+SUBMITTED_TEXT = ["thank you for applying", "thank you for your application","application has been submitted", "application was submitted",
                   "successfully submitted", "we have received your application", "thanks for applying"]
 _job_title = {"text": ""}
 _uploaded: list[str] = []  # the one resume this application holds (reset per application)

@@ -46,7 +46,10 @@ BOT_CHECK_TEXT = ["verify you are human", "i'm not a robot", "i am not a robot",
 
 def bot_check_visible(page: Page) -> bool:
     for frame in page.frames:
-        if any(marker in (frame.url or "").lower() for marker in BOT_CHECK_FRAMES):
+        url = (frame.url or "").lower()
+        if "size=invisible" in url:
+            continue  # an invisible reCAPTCHA's badge; a real challenge opens its own frame
+        if any(marker in url for marker in BOT_CHECK_FRAMES):
             element = frame.frame_element() if frame != page.main_frame else None
             if element is None or element.is_visible():
                 return True

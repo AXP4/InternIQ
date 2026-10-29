@@ -41,7 +41,7 @@ def compose(posting: dict, summary: dict) -> dict:
     for _ in range(3):
         response = client.messages.create(model=config.WRITE_MODEL, max_tokens=1500, system=INSTRUCTIONS,
                                           messages=[{"role": "user", "content": prompt}])
-        text = response.content[0].text
+        text = next(b.text for b in response.content if b.type == "text")  # skip thinking blocks
         draft = json.loads(text[text.find("{"): text.rfind("}") + 1])
         visible = draft["subject"] + draft["body"].replace("EMAIL_REMOVED", "")
         if not DASHES.search(visible):

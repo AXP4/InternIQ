@@ -173,8 +173,12 @@ with something Ali can run and see working.
 - **Elevate block (2026-10-28):** Cloudflare blocked the agent's browser on Elevate's login.
   Nothing works around it: all Elevate work stops until Ali runs `unblock`, and "I intend
   to apply" clicks queue up and run in one visit with `intend`.
-- Employer Email postings: draft emails for approval (Terra Sense was sent by Ali by hand
-  from a drafted text).
+- ✅ Employer Email postings (`applier/email_apply.py`): the agent drafts the email and
+  posts it as a card; Ali sends it from his Outlook and taps Submit ("I sent it"). Sent:
+  Terra Sense, SeisWare, Baytex, Validere.
+- Still to do in Phase 7: Raise (Enbridge 152806, due Nov 11), BambooHR (Convverge), ADP
+  (Peters & Co.), Oleeo (Morgan Stanley), custom sites (TCS, Tourmaline), and possibly a
+  generic fallback driver for simple unknown sites.
 - ✅ "Accumulate Online" postings: apply inside Elevate itself (`elevate/apply.py`), same
   approval flow. Moved ahead of the other sites because of deadlines; 7 submitted on
   2026-10-26 with Ali approving each.

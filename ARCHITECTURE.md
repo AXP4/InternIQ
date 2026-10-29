@@ -103,8 +103,9 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   Verification codes: try the Outlook API (Microsoft Graph); if UCalgary blocks it,
   ask Ali on Discord to paste the code.
 - **Form filling loop** (this is the "agent" part):
-  1. The site driver (`workday.py`, `icims.py`; each has the same function names, so
-     `run.py` picks one from the site) reads every visible question on the page: label,
+  1. The site driver (`workday.py`, `icims.py`, `avature.py`, `eightfold.py`,
+     `greenhouse.py`; each has the same function names, so `run.py` picks one from the
+     site) reads every visible question on the page: label,
      kind (text, select, search select, radio, checkbox, date, file), options, required
      flag, and current value, and tags each with a stable id.
   2. `filler.py` sends them to Claude Sonnet with RULES.md, profile facts, resume.yaml,
@@ -126,19 +127,34 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
 - iCIMS specifics: the form sits in nested iframes, steps are read from the progress bar,
   and the shared profile resume is replaced before each job because iCIMS reopens jobs
   past the resume step. A batch (`apply <ids...>`) shares one sign-in.
-- After a confirmed submit, `elevate/intent.py` clicks "I intend to apply" on Elevate
-  (the only Elevate click that changes anything) and confirms the row shows "Expressed
-  Intention to Apply".
+- One-page forms (Eightfold, Greenhouse) are their own final page: filled once, then the
+  card. Avature (EA) treats any page it can't place in the step bar as final.
+- **Approval 2:** `submit()` presses the final button exactly once. If the site shows
+  another page with questions instead of a confirmation (EA's extra pages, Greenhouse's
+  emailed security code), it's filled (asking Ali when needed) and gets its own approval
+  card before the next press.
+- Safety checks before anything is saved: form name fields hold the legal name (Ali
+  LEGALNAME; "Alanizi" only in preferred-last-name fields), the page's job title
+  matches the posting (term words like Fall/Spring must agree), and parser-filled skill
+  tags are replaced with profile facts only.
+- After a confirmed submit, `elevate/intent.py` clicks "I intend to apply" on Elevate and
+  confirms the row shows "Expressed Intention to Apply". If Elevate is blocked, the click
+  is queued; `intend` (no id) does every queued click in one visit.
+- **Elevate security block:** a block page stops all Elevate work at once (`ElevateBlocked`)
+  and sets `elevate_blocked`; nothing touches Elevate again until Ali runs `unblock`.
+  Bot checks and blocks are never worked around.
 - Saves per-site notes (`site_notes` table) such as "a saved draft shows Continue
   Application" so it gets better over time.
 - Commands: `dryrun <id> <url>` (fill a decoy job on the same site, stop at Review),
-  `apply <ids...>`, `intend <id>`.
+  `apply <ids...>`, `email <ids...>`, `intend [id]`, `unblock`.
 - **Accumulate Online** postings (`elevate/apply.py`): no employer site. The tailored PDFs
   go into Ali's Elevate document library, the APPLY form gets a custom package built from
   them, and Submit Application is pressed only after approval, then confirmed in Elevate's
   Application Submitted list. `apply <ids...>` picks this path from the posting's procedure.
-- **Employer Email** postings: draft the email with attachments and send it to Ali for
-  approval (send automatically only if Outlook API access works).
+- **Employer Email** postings (`applier/email_apply.py`, `email <ids...>`): the agent writes
+  the package and a short email (no dashes, no contractions), and the card shows To,
+  Subject, Body and the PDFs. Ali sends it from his university Outlook (the agent has no
+  access to it); on an email card, Submit means "I sent it" and records the submission.
 
 ### 6. Discord bot (`interniq/discord_bot.py`)
 - Private server, one channel per purpose: `#approvals`, `#questions`, `#log`.

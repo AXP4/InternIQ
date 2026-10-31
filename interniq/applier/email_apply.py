@@ -14,6 +14,7 @@ import anthropic
 
 from interniq import config, db, discord_bot
 from interniq.applier import run
+from interniq.elevate import apply as elevate_apply
 from interniq.elevate import clean_title
 from interniq.writer import package
 
@@ -31,7 +32,11 @@ Rules:
 - One closing line before the signature (for example "Thank you for your time."), never two.
 - Claim nothing that is not in the cover letter or the facts given.
 - Signature lines, exactly: "Ali Alanizi", "PHONE_REMOVED", "EMAIL_REMOVED".
-Return JSON: {"subject": "...", "body": "..."}"""
+- The posting's own application instructions win over the rules above: if it names an exact
+  subject line, use it word for word (dashes and colons included). If it asks for the
+  documents combined into one PDF with a given file name, return that name in
+  single_pdf_name, with "Full Name" replaced by "Ali LEGALNAME" (no ".pdf"); otherwise null.
+Return JSON: {"subject": "...", "body": "...", "single_pdf_name": "..." or null}"""
 
 DASHES = re.compile(r"[-‐-―]")
 # I'm, I'd, I've, I'll, we're, don't, it's, that's... (possessives like "SeisWare's" are fine)
@@ -42,14 +47,18 @@ CONTRACTIONS = re.compile(r"\b(?:\w+n['’]t|I['’](?:m|d|ve|ll)|\w+['’](?:re
 def compose(posting: dict, summary: dict) -> dict:
     client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
     letter = "\n\n".join(summary["package"].get("paragraphs", []))
-    prompt = (f"<posting>{json.dumps({k: posting[k] for k in ('org', 'title', 'location', 'email')})}</posting>\n"
+    keys = ("org", "title", "location", "email", "additional_info", "description")
+    prompt = (f"<posting>{json.dumps({k: posting[k] for k in keys})}</posting>\n"
               f"<cover_letter>{letter}</cover_letter>")
+    posting_text = f"{posting['additional_info'] or ''} {posting['description'] or ''}"
     for _ in range(3):
         response = client.messages.create(model=config.WRITE_MODEL, max_tokens=1500, system=INSTRUCTIONS,
                                           messages=[{"role": "user", "content": prompt}])
         text = next(b.text for b in response.content if b.type == "text")  # skip thinking blocks
         draft = json.loads(text[text.find("{"): text.rfind("}") + 1])
-        visible = draft["subject"] + draft["body"].replace("EMAIL_REMOVED", "")
+        # A subject the posting dictates word for word may contain dashes; Ali's own words may not.
+        subject = "" if draft["subject"].strip() and draft["subject"].strip() in posting_text else draft["subject"]
+        visible = subject + draft["body"].replace("EMAIL_REMOVED", "")
         problems = []
         if DASHES.search(visible):
             problems.append("a dash or hyphen")
@@ -83,9 +92,15 @@ def run_email(posting_ids: list[int]) -> None:
         if not summary:
             raise SystemExit(f"No package for {posting_id}. Run `python -m interniq write {posting_id}` first.")
         docs = run.documents(posting_id)
-        files = [docs[k] for k in ("cover_letter", "resume", "transcript") if k in docs]
+        materials = " ".join(json.loads(posting["materials"] or "[]")).lower()
+        files = [docs[k] for k in ("cover_letter", "resume", "transcript")
+                 if k in docs and (k == "resume" or k.split("_")[0] in materials)]
         draft = compose(posting, summary)
         folder = package.OUTPUT_DIR / str(posting_id)
+        if draft.get("single_pdf_name"):  # the posting wants everything in one named PDF
+            merged = folder / f"{draft['single_pdf_name'].strip()}.pdf"
+            elevate_apply.merge(files, merged)
+            files = [merged]
         (folder / "email.txt").write_text(f"To: {posting['email']}\nSubject: {draft['subject']}\n\n{draft['body']}\n",
                                           encoding="utf-8")
         db.propose_application(conn, posting_id, [p.name for p in files], "email")

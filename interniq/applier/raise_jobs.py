@@ -116,8 +116,14 @@ def set_checkbox(page: Page, field_id: str, checked: bool, option: str | None = 
     label = describe(page, field_id)["label"]
     if checked and re.search(r"sms|automated voice", label, re.I):
         return "not ticked: Ali never consents to SMS or automated calls"
-    box.set_checked(checked, force=True)
-    return "ok" if box.is_checked() == checked else "checkbox didn't change"
+    if box.evaluate("e => e.checked") != checked:
+        # Raise's styled checkbox: an invisible input lies over its label, and only a real
+        # click on the label's left edge toggles it (the middle hits the Terms link).
+        label = box.evaluate_handle("e => e.nextElementSibling || e").as_element()
+        rect = label.bounding_box()
+        page.mouse.click(rect["x"] + 5, rect["y"] + rect["height"] / 2)
+        page.wait_for_timeout(800)
+    return "ok" if box.evaluate("e => e.checked") == checked else "checkbox didn't change"
 
 
 def set_date(page: Page, field_id: str, month: str = "", year: str = "", day: str = "") -> str:

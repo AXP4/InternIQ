@@ -356,7 +356,17 @@ class FixModal(discord.ui.Modal, title="What should change?"):
 
     async def on_submit(self, interaction: discord.Interaction):
         text = str(self.change.value).strip()
-        db.add_fix_request(db.connect(), self.posting_id, text)
+        conn = db.connect()
+        db.add_fix_request(conn, self.posting_id, text)
+        if db.get_setting(conn, f"live_form:{self.posting_id}", ""):
+            # A run has this form open behind the card: the change goes to the form, not the
+            # resume or letter. The run applies it and posts a new card.
+            await interaction.response.edit_message(
+                content=f"{interaction.message.content}\n✏️ **Change requested on the form:** {text}\n"
+                        "Applying it to the open page; a new card follows.",
+                view=None,
+            )
+            return
         await interaction.response.edit_message(
             content=f"{interaction.message.content}\n✏️ **Fix requested:** {text}\nRewriting, a new card follows.",
             view=None,

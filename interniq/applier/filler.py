@@ -207,7 +207,7 @@ class Filler:
 
     # ----- the loop -----
 
-    def fill_page(self, snapshot: dict, problems: list[str] | None = None) -> None:
+    def fill_page(self, snapshot: dict, problems: list[str] | None = None, ali_note: str | None = None) -> None:
         """Run the tool loop until Claude calls page_done (or the turn limit)."""
         intro = {
             "posting": {k: self.posting.get(k) for k in ("id", "org", "title", "location", "materials", "description")},
@@ -218,6 +218,9 @@ class Filler:
                 f"Page now:\n{compact(snapshot)}")
         if problems:
             text += "\n\nThe site refused to continue because of these errors; fix them:\n- " + "\n- ".join(problems)
+        if ali_note:
+            text += ("\n\nAli reviewed this filled page on his approval card and asked for this change. "
+                     f"Make exactly this change and nothing else, then call page_done:\n{ali_note}")
         self.asked_this_page = False
         messages = [{"role": "user", "content": text}]
         for _ in range(MAX_TURNS):

@@ -256,8 +256,20 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
             pass
         return
 
+    def form_fix(note: str) -> dict:
+        """Ali's Fix on a form card: apply his note to the open page, re-read it, new card."""
+        filler.fill_page(driver.read_page(page), ali_note=note)
+        snap_step(page, filler, "after your fix")
+        check_names(filler)
+        fixed = folder / "after_fix.png"
+        page.screenshot(path=str(fixed), full_page=True)
+        report.write_text(answers_report(filler), encoding="utf-8")
+        notes.update({"legal": filler.legal, "unsure": [f"**Fixed as you asked:** {note}"] + filler.unsure,
+                      "screenshot": fixed.name, "step_shots": [p.name for p in filler.step_shots[-9:]]})
+        return notes
+
     print("  posting the approval card; keeping the Review page open until Ali decides")
-    if wait_for_decision(page, conn, posting_id, label, notes) != "approved":
+    if wait_for_decision(page, conn, posting_id, label, notes, on_fix=form_fix) != "approved":
         return
     confirmed = driver.submit(page, posting_id)
     # Some sites (EA) show another page after the press that was supposed to send it.
@@ -283,7 +295,8 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         report.write_text(answers_report(filler), encoding="utf-8")
         notes.update({"legal": filler.legal, "unsure": filler.unsure, "screenshot": shot.name,
                       "step_shots": [p.name for p in filler.step_shots[-9:]]})
-        if wait_for_decision(page, conn, posting_id, f"{label} (approval {round_number})", notes) != "approved":
+        if wait_for_decision(page, conn, posting_id, f"{label} (approval {round_number})", notes,
+                             on_fix=form_fix) != "approved":
             return
         confirmed = driver.submit(page, posting_id)
     confirm_shot = shot.with_name("submitted.png")
@@ -299,29 +312,48 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     page.wait_for_timeout(5000)
 
 
-def wait_for_decision(page, conn, posting_id: int, label: str, notes: dict) -> str | None:
+def wait_for_decision(page, conn, posting_id: int, label: str, notes: dict, on_fix=None) -> str | None:
     """Post the approval card, then wait for Ali's tap. Returns "approved", or None when
-    he skipped, asked for a fix, or didn't decide in time."""
-    discord_bot.propose([posting_id])  # records the pending application
-    db.set_application_notes(conn, posting_id, notes)
-    card = discord_bot.approval_card(posting_id)  # includes the screenshots, legal, and unsure items
-    discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card]))
-    deadline = time.time() + APPROVAL_WAIT_HOURS * 3600
-    while time.time() < deadline:
-        page.wait_for_timeout(10_000)
-        state = db.get_application(conn, posting_id)["state"]
-        if state == "approved":
-            return state
-        if state == "skipped":
-            print("  Ali skipped it")
+    he skipped or didn't decide in time.
+
+    With `on_fix`, the form is open behind the card: a Fix tap is a correction to the form
+    (the bot sees the `live_form` setting and doesn't rewrite the package). on_fix(note)
+    applies it and returns the updated notes, and a new card goes up."""
+    live = f"live_form:{posting_id}"
+    try:
+        while True:
+            discord_bot.propose([posting_id])  # records the pending application
+            db.set_application_notes(conn, posting_id, notes)
+            if on_fix:
+                db.set_setting(conn, live, "1")
+            card = discord_bot.approval_card(posting_id)  # includes the screenshots, legal, and unsure items
+            discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card]))
+            state = None
+            deadline = time.time() + APPROVAL_WAIT_HOURS * 3600
+            while time.time() < deadline:
+                page.wait_for_timeout(10_000)
+                state = db.get_application(conn, posting_id)["state"]
+                if state in ("approved", "skipped", "fixing"):
+                    break
+            if state == "approved":
+                return state
+            if state == "skipped":
+                print("  Ali skipped it")
+                return None
+            if state == "fixing" and on_fix:
+                note = json.loads(db.get_application(conn, posting_id)["fix_requests"] or "[]")[-1]
+                print(f"  Ali asked for a change on the form: {note[:100]}")
+                notes = on_fix(note)
+                continue  # a new card for the corrected page
+            if state == "fixing":
+                print("  Ali asked for a fix; moving on (run it again after the fixed package is ready)")
+                discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
+                                                  f"✏️ {label}: run again after the fixed package is ready."))
+                return None
+            print("  no decision within the wait limit; moving on")
             return None
-        if state == "fixing":
-            print("  Ali asked for a fix; moving on (run it again after the fixed package is ready)")
-            discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
-                                              f"✏️ {label}: run again after the fixed package is ready."))
-            return None
-    print("  no decision within the wait limit; moving on")
-    return None
+    finally:
+        db.set_setting(conn, live, "")
 
 
 def run_elevate(context, page, posting_id: int) -> None:

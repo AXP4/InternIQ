@@ -178,6 +178,8 @@ def click_styled(page: Page, box) -> None:
     """Raise's styled inputs: an invisible input lies over its label, and only a real click
     on the label's left edge toggles it (the middle can hit a link)."""
     label = box.evaluate_handle("e => (e.labels && e.labels[0]) || e.nextElementSibling || e").as_element()
+    label.scroll_into_view_if_needed()  # a mouse click only lands on what's on screen
+    page.wait_for_timeout(300)
     rect = label.bounding_box()
     page.mouse.click(rect["x"] + 5, rect["y"] + rect["height"] / 2)
     page.wait_for_timeout(800)

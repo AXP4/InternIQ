@@ -24,6 +24,7 @@ SUBMITTED_TEXT = ["thank you for applying", "thank you for your application", "a
 TERMS = re.compile(r"terms of service", re.I)  # Ali approved ticking this one; SMS consent stays unticked
 _job_title = {"text": ""}
 _fields: dict[str, object] = {}  # id -> element handle, rebuilt on every read
+_groups: dict[str, list] = {}  # radio question id -> [(option label, handle)]
 
 
 def content(page: Page) -> Frame:
@@ -34,13 +35,24 @@ DESCRIBE_JS = r"""
 e => {
   const text = n => (n ? n.innerText.replace(/\s+/g, ' ').trim() : '');
   const type = (e.type || '').toLowerCase();
-  let label = (e.labels && e.labels[0] && text(e.labels[0])) || e.getAttribute('aria-label') || '';
-  if (!label) {
+  const own = (e.labels && e.labels[0] && text(e.labels[0])) || (e.nextElementSibling && e.nextElementSibling.tagName === 'LABEL'
+              ? text(e.nextElementSibling) : '') || e.getAttribute('aria-label') || '';
+  // The question itself sits above the input: walk up until an ancestor holds text besides
+  // the option labels inside it (Raise labels its radios just "Yes"/"No").
+  const question = () => {
     let box = e.parentElement;
-    for (let i = 0; i < 4 && box && !text(box); i++) box = box.parentElement;
-    label = text(box).slice(0, 200);
-  }
-  const f = {label, required: e.required || e.getAttribute('aria-required') === 'true', type,
+    for (let i = 0; i < 8 && box; i++, box = box.parentElement) {
+      let t = text(box);
+      for (const l of box.querySelectorAll('label')) t = t.replace(text(l), '');
+      t = t.replace(/\s+/g, ' ').trim();
+      if (t.length > 3) return t.slice(0, 250);
+    }
+    return '';
+  };
+  const choice = ['radio', 'checkbox'].includes(type) && own.length < 40;
+  let label = choice ? question() : (own || question());
+  const f = {label, option: choice ? own : '', name: e.name || '',
+             required: e.required || e.getAttribute('aria-required') === 'true', type,
              visible: !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length)};
   if (e.tagName === 'SELECT') {
     f.kind = 'select'; f.options = [...e.options].map(o => o.text.trim()).filter(Boolean);
@@ -58,15 +70,31 @@ def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
     frame = content(page)
     _fields.clear()
-    fields = []
+    _groups.clear()
+    fields, radios = [], {}
     for n, handle in enumerate(frame.locator("input, select, textarea").element_handles(), start=1):
         f = handle.evaluate(DESCRIBE_JS)
         if f["type"] in ("hidden", "submit", "button", "password") or (not f["visible"] and f["kind"] != "file"):
             continue
-        if TERMS.search(f["label"]) is None and re.search(r"sms|automated voice", f["label"], re.I):
+        if re.search(r"sms|automated voice", f["label"] + " " + f["option"], re.I) and not TERMS.search(f["label"]):
             continue  # Ali's choice: never consent to SMS or automated calls
         if f["kind"] == "file" and "drag" in f["label"].lower():
             f["label"] = "Upload Resume (the resume goes here)"
+        if f["kind"] == "radio":  # a Yes/No pair becomes one question with options
+            key = f["name"] or f["label"]
+            if key not in radios:
+                radios[key] = {"id": f"r{n}", "kind": "radio", "label": f["label"], "required": f["required"],
+                               "options": [], "value": ""}
+                fields.append(radios[key])
+                _groups[radios[key]["id"]] = []
+            group = radios[key]
+            group["options"].append(f["option"])
+            _groups[group["id"]].append((f["option"], handle))
+            if f["value"] == "checked":
+                group["value"] = f["option"]
+            continue
+        if f["kind"] == "checkbox" and f["option"]:
+            f["label"] = f"{f['label']}: {f['option']}"
         f["id"] = f"r{n}"
         _fields[f["id"]] = handle
         fields.append({k: f[k] for k in ("id", "kind", "label", "required", "value") if k in f}
@@ -106,9 +134,27 @@ def select_option(page: Page, field_id: str, value: str) -> str:
 select_search = select_option
 
 
+def click_styled(page: Page, box) -> None:
+    """Raise's styled inputs: an invisible input lies over its label, and only a real click
+    on the label's left edge toggles it (the middle can hit a link)."""
+    label = box.evaluate_handle("e => (e.labels && e.labels[0]) || e.nextElementSibling || e").as_element()
+    rect = label.bounding_box()
+    page.mouse.click(rect["x"] + 5, rect["y"] + rect["height"] / 2)
+    page.wait_for_timeout(800)
+
+
 def choose_radio(page: Page, field_id: str, value: str) -> str:
-    handle(field_id).check(force=True)
-    return "ok"
+    group = _groups.get(field_id)
+    if not group:
+        return "that question is gone; read the page again"
+    names = [name for name, _ in group]
+    choice = best_option(names, value)
+    if not choice:
+        return f"no choice matches {value!r}; choices are: {names}"
+    target = group[names.index(choice)][1]
+    if not target.evaluate("e => e.checked"):
+        click_styled(page, target)
+    return "ok" if target.evaluate("e => e.checked") else "choice didn't stick"
 
 
 def set_checkbox(page: Page, field_id: str, checked: bool, option: str | None = None) -> str:
@@ -117,12 +163,7 @@ def set_checkbox(page: Page, field_id: str, checked: bool, option: str | None = 
     if checked and re.search(r"sms|automated voice", label, re.I):
         return "not ticked: Ali never consents to SMS or automated calls"
     if box.evaluate("e => e.checked") != checked:
-        # Raise's styled checkbox: an invisible input lies over its label, and only a real
-        # click on the label's left edge toggles it (the middle hits the Terms link).
-        label = box.evaluate_handle("e => e.nextElementSibling || e").as_element()
-        rect = label.bounding_box()
-        page.mouse.click(rect["x"] + 5, rect["y"] + rect["height"] / 2)
-        page.wait_for_timeout(800)
+        click_styled(page, box)
     return "ok" if box.evaluate("e => e.checked") == checked else "checkbox didn't change"
 
 

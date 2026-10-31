@@ -144,11 +144,20 @@ def intend(posting_id: str = "") -> None:
     from interniq import browser
     from interniq.elevate import intent
 
+    from interniq import db
+
     with browser.open_browser() as context:
         if posting_id:
             print(intent.express_intent(context, int(posting_id)))
         else:  # every submitted application still missing the click, in one visit
             print("\n".join(intent.express_all(context)))
+        if db.get_setting(db.connect(), "elevate_blocked", ""):
+            # Leave the page up so Ali can see what Elevate showed; close the window to finish.
+            print("Elevate looks blocked; the window stays open until you close it.")
+            try:
+                browser.page_of(context).wait_for_event("close", timeout=30 * 60 * 1000)
+            except Exception:
+                pass
 
 
 def email(*posting_ids: str) -> None:

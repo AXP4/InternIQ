@@ -10,7 +10,7 @@ from datetime import datetime
 from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from interniq import browser, db, discord_bot
+from interniq import browser, config, db, discord_bot
 from interniq.elevate import JOBS_URL
 
 QUICK_SEARCH = "ENSF Jobs"
@@ -107,11 +107,14 @@ def stop_if_blocked(page: Page) -> None:
     text = page.locator("body").inner_text().lower()[:3000]
     if any(phrase in text for phrase in BLOCKED_TEXT) or "attention required" in page.title().lower():
         db.set_setting(db.connect(), "elevate_blocked", page.url[:200])
-        discord_bot.call(discord_bot.send(
-            "DISCORD_QUESTIONS_CHANNEL_ID",
-            "⛔ Elevate's security service blocked the InternIQ browser. I stopped everything on Elevate "
-            "and won't retry. Nothing else will run on Elevate until you clear it with `python -m interniq unblock`."))
-        raise ElevateBlocked("Elevate blocked the browser; stopped (no retries)")
+        shot = config.ROOT / "data" / "elevate_block.png"
+        page.screenshot(path=str(shot))
+        found = next((p for p in BLOCKED_TEXT if p in text), "attention required")
+        discord_bot.call(discord_bot.send_many("DISCORD_QUESTIONS_CHANNEL_ID", [discord_bot.Card(
+            f"⛔ Elevate looks blocked (the page says \"{found}\"). I stopped everything on Elevate and won't "
+            "retry; the window stays open so you can see it. Nothing else runs on Elevate until "
+            "`python -m interniq unblock`.", files=[shot])]))
+        raise ElevateBlocked(f"Elevate blocked the browser (page says {found!r}); stopped (no retries)")
 
 
 def open_quick_search(page: Page) -> list[dict]:

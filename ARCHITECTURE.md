@@ -129,6 +129,9 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   past the resume step. A batch (`apply <ids...>`) shares one sign-in.
 - One-page forms (Eightfold, Greenhouse) are their own final page: filled once, then the
   card. Avature (EA) treats any page it can't place in the step bar as final.
+- **Fix on a form card:** while a run has the form open behind a card (`live_form:<id>`
+  setting), Fix means "change this answer": the run hands Ali's note to the filler, re-reads
+  the page, and posts a new card. Without a live form, Fix rewrites the resume and letter.
 - **Approval 2:** `submit()` presses the final button exactly once. If the site shows
   another page with questions instead of a confirmation (EA's extra pages, Greenhouse's
   emailed security code), it's filled (asking Ali when needed) and gets its own approval

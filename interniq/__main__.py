@@ -65,6 +65,19 @@ def write(*posting_ids: str) -> None:
         print(f"  files: {s['folder']}")
 
 
+def inbox() -> None:
+    """Import postings Ali pasted into data/inbox/, check their employer links, then screen."""
+    from interniq import browser, db, sites
+    from interniq.elevate import paste
+
+    results = paste.import_inbox()
+    print("\n".join(results) or "data/inbox/ is empty")
+    if any("imported" in r for r in results):
+        with browser.open_browser() as context:
+            sites.check_links(context, db.connect())  # employer sites only, never Elevate
+        screen()
+
+
 def screen() -> None:
     """Decide apply / skip / ask for every new posting."""
     from interniq import screener
@@ -188,6 +201,7 @@ COMMANDS = {
     "ping": ping,
     "login": login,
     "crawl": crawl,
+    "inbox": inbox,
     "screen": screen,
     "decide": decide,
     "write": write,

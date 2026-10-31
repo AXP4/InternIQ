@@ -82,6 +82,11 @@ def write(posting_id: int, feedback: str | None = None) -> dict:
     composer = Composer(posting, with_letter, earlier["package"] if earlier else None, feedback)
 
     def problems_in(package: Package) -> list[str]:
+        if with_letter and package.resume_file_name == package.cover_letter_file_name:
+            # A posting that wants both in ONE named file: render them separately (one would
+            # overwrite the other); the email step merges them under the required name.
+            package.resume_file_name = "Ali_Alanizi_Resume.pdf"
+            package.cover_letter_file_name = "Ali_Alanizi_Cover_Letter.pdf"
         found = checks.check(package, posting) if with_letter else []
         found += checks.check_focus(package)
         return found + render(package, out_dir, data, with_letter)

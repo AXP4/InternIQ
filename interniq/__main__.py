@@ -182,6 +182,15 @@ def email(*posting_ids: str) -> None:
     email_apply.run_email([int(p) for p in posting_ids])
 
 
+def handoff(*posting_ids: str) -> None:
+    """Prepare applications Ali submits himself (inside Elevate while it blocks the agent)."""
+    from interniq.applier import handoff as handoff_cards
+
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq handoff <posting id> [more ids]")
+    handoff_cards.run_handoff([int(p) for p in posting_ids])
+
+
 def unblock() -> None:
     """Allow the agent back on Elevate after a security block (only when Ali says so)."""
     from interniq import db
@@ -210,6 +219,7 @@ COMMANDS = {
     "apply": apply,
     "intend": intend,
     "email": email,
+    "handoff": handoff,
     "unblock": unblock,
     "bot": bot,
 }

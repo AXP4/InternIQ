@@ -26,7 +26,7 @@ Rules:
   "Co op" as "Coop" and use commas or new sentences instead of dashes.
 - Body: a greeting, 2 or 3 short paragraphs, then the signature. Say the documents are
   attached, one sentence on why this role (taken from the cover letter), and the availability
-  sentence "I'm available starting January 2027." Never state a term length.
+  sentence "I am available starting January 2027." Never state a term length.
 - No contractions anywhere (Ali's preference): write "I am", "I would", "I have", "do not",
   "it is", never "I'm", "I'd", "I've", "don't", "it's".
 - One closing line before the signature (for example "Thank you for your time."), never two.
@@ -35,7 +35,7 @@ Rules:
 - The posting's own application instructions win over the rules above: if it names an exact
   subject line, use it word for word (dashes and colons included). If it asks for the
   documents combined into one PDF with a given file name, return that name in
-  single_pdf_name, with "Full Name" replaced by "Ali LEGALNAME" (no ".pdf"); otherwise null.
+  single_pdf_name, with "Full Name" replaced by "Ali Alanizi" (his document name; no ".pdf"); otherwise null.
 Return JSON: {"subject": "...", "body": "...", "single_pdf_name": "..." or null}"""
 
 DASHES = re.compile(r"[-‐-―]")
@@ -44,12 +44,15 @@ CONTRACTIONS = re.compile(r"\b(?:\w+n['’]t|I['’](?:m|d|ve|ll)|\w+['’](?:re
                           r"(?:it|that|there|here|what|who|he|she|let)['’]s)\b", re.I)
 
 
-def compose(posting: dict, summary: dict) -> dict:
+def compose(posting: dict, summary: dict, attachments: list[str]) -> dict:
     client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
     letter = "\n\n".join(summary["package"].get("paragraphs", []))
     keys = ("org", "title", "location", "email", "additional_info", "description")
     prompt = (f"<posting>{json.dumps({k: posting[k] for k in keys})}</posting>\n"
-              f"<cover_letter>{letter}</cover_letter>")
+              f"<cover_letter>{letter}</cover_letter>\n"
+              f"<attachments>{json.dumps(attachments)}</attachments>\n"
+              "Mention only the documents actually attached (or, if you return single_pdf_name, "
+              "say they are combined in one PDF).")
     posting_text = f"{posting['additional_info'] or ''} {posting['description'] or ''}"
     for _ in range(3):
         response = client.messages.create(model=config.WRITE_MODEL, max_tokens=1500, system=INSTRUCTIONS,
@@ -95,7 +98,7 @@ def run_email(posting_ids: list[int]) -> None:
         materials = " ".join(json.loads(posting["materials"] or "[]")).lower()
         files = [docs[k] for k in ("cover_letter", "resume", "transcript")
                  if k in docs and (k == "resume" or k.split("_")[0] in materials)]
-        draft = compose(posting, summary)
+        draft = compose(posting, summary, [p.name for p in files])
         folder = package.OUTPUT_DIR / str(posting_id)
         if draft.get("single_pdf_name"):  # the posting wants everything in one named PDF
             merged = folder / f"{draft['single_pdf_name'].strip()}.pdf"

@@ -19,7 +19,7 @@ SITE = "raise"
 SHOWS_FILES_ON_REVIEW = False
 PRESS_TEXT = re.compile(r"^(apply with resume|submit( application| answers)?|apply|next|continue|save (and|&) continue|"
                         r"sign in|log in|login)$", re.I)
-SUBMITTED_TEXT = ["thank you for applying", "thank you for your application", "application has been submitted",
+SUBMITTED_TEXT = ["all done", "thank you for applying", "thank you for your application", "application has been submitted",
                   "application was submitted", "successfully applied", "application received"]
 TERMS = re.compile(r"terms of service", re.I)  # Ali approved ticking this one; SMS consent stays unticked
 _job_title = {"text": ""}

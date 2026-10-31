@@ -17,7 +17,7 @@ from interniq.applier.workday import Blocked, best_option, password_slots, wait_
 
 SITE = "raise"
 SHOWS_FILES_ON_REVIEW = False
-PRESS_TEXT = re.compile(r"^(apply with resume|submit( application)?|apply|next|continue|save (and|&) continue|"
+PRESS_TEXT = re.compile(r"^(apply with resume|submit( application| answers)?|apply|next|continue|save (and|&) continue|"
                         r"sign in|log in|login)$", re.I)
 SUBMITTED_TEXT = ["thank you for applying", "thank you for your application", "application has been submitted",
                   "application was submitted", "successfully applied", "application received"]
@@ -25,6 +25,7 @@ TERMS = re.compile(r"terms of service", re.I)  # Ali approved ticking this one; 
 _job_title = {"text": ""}
 _fields: dict[str, object] = {}  # id -> element handle, rebuilt on every read
 _groups: dict[str, list] = {}  # radio question id -> [(option label, handle)]
+_options: dict[str, list[str]] = {}  # dropdown id -> choices, read once per page
 
 
 def content(page: Page) -> Frame:
@@ -37,20 +38,23 @@ e => {
   const type = (e.type || '').toLowerCase();
   const own = (e.labels && e.labels[0] && text(e.labels[0])) || (e.nextElementSibling && e.nextElementSibling.tagName === 'LABEL'
               ? text(e.nextElementSibling) : '') || e.getAttribute('aria-label') || '';
-  // The question itself sits above the input: walk up until an ancestor holds text besides
-  // the option labels inside it (Raise labels its radios just "Yes"/"No").
+  // Each question is a div.single-question: its number, "*", the question line, then the
+  // answer block. The input sits inside Salesforce components (shadow DOM), so walk up
+  // through shadow hosts to that block and take its first real line.
   const question = () => {
-    let box = e.parentElement;
-    for (let i = 0; i < 8 && box; i++, box = box.parentElement) {
-      let t = text(box);
-      for (const l of box.querySelectorAll('label')) t = t.replace(text(l), '');
-      t = t.replace(/\s+/g, ' ').trim();
-      if (t.length > 3) return t.slice(0, 250);
+    let box = e;
+    for (let i = 0; i < 15 && box; i++) {
+      box = box.parentElement || (box.getRootNode && box.getRootNode().host) || null;
+      if (box && /single-question/.test(box.className || '')) {
+        const lines = box.innerText.split('\n').map(l => l.trim()).filter(l => l && !/^(\d+|\*)$/.test(l));
+        return lines.slice(0, lines[1] && lines[1].startsWith('(') || /select all/i.test(lines[1] || '') ? 2 : 1)
+                    .join(' ').slice(0, 250);
+      }
     }
     return '';
   };
   const choice = ['radio', 'checkbox'].includes(type) && own.length < 40;
-  let label = choice ? question() : (own || question());
+  let label = choice ? question() : (question() || own);
   const f = {label, option: choice ? own : '', name: e.name || '',
              required: e.required || e.getAttribute('aria-required') === 'true', type,
              visible: !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length)};
@@ -95,10 +99,23 @@ def read_page(page: Page) -> dict:
             continue
         if f["kind"] == "checkbox" and f["option"]:
             f["label"] = f"{f['label']}: {f['option']}"
+        if f["kind"] == "file" and re.search(r"transcript", f["label"], re.I):
+            f["label"] += " (the transcript goes here)"
         f["id"] = f"r{n}"
         _fields[f["id"]] = handle
         fields.append({k: f[k] for k in ("id", "kind", "label", "required", "value") if k in f}
                       | ({"options": f["options"]} if "options" in f else {}))
+    # Salesforce dropdowns are buttons ("Select an option"), not <select>s.
+    for n, button in enumerate(frame.locator('button[role="combobox"]:visible, button:visible:has-text("Select an option")')
+                               .element_handles(), start=1):
+        info = button.evaluate(DESCRIBE_JS)
+        fid = f"d{n}"
+        _fields[fid] = button
+        if fid not in _options:
+            _options[fid] = dropdown_options(page, button)
+        current = button.inner_text().strip()
+        fields.append({"id": fid, "kind": "select", "label": info["label"], "required": True,
+                       "value": "" if current == "Select an option" else current, "options": _options[fid]})
     errors = [t for t in frame.locator('[role="alert"], .slds-has-error, .error').all_inner_texts() if t.strip()]
     return {"step": "Application", "fields": fields, "add_buttons": [], "errors": sorted(set(errors))}
 
@@ -121,8 +138,31 @@ def fill_text(page: Page, field_id: str, value: str) -> str:
     return "ok" if got.strip() == value.strip() else f"value didn't stick (field shows {got!r})"
 
 
+def dropdown_options(page: Page, button) -> list[str]:
+    """Open a Salesforce dropdown, read its choices, close it again."""
+    button.click()
+    page.wait_for_timeout(800)
+    names = [t.strip() for t in content(page).locator('[role="option"]:visible').all_inner_texts() if t.strip()]
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    return names[:60]
+
+
 def select_option(page: Page, field_id: str, value: str) -> str:
     box = handle(field_id)
+    if field_id.startswith("d"):  # a Salesforce dropdown button
+        box.click()
+        page.wait_for_timeout(800)
+        options = content(page).locator('[role="option"]:visible').all()
+        names = [o.inner_text().strip() for o in options]
+        choice = best_option(names, value)
+        if not choice:
+            page.keyboard.press("Escape")
+            return f"no option matches {value!r}; options are: {names[:60]}"
+        options[names.index(choice)].click()
+        page.wait_for_timeout(800)
+        got = box.inner_text().strip()
+        return f"ok (selected {choice!r})" if got == choice else f"selection didn't stick (shows {got!r})"
     names = box.evaluate("e => [...e.options].map(o => o.text.trim())")
     choice = best_option(names, value)
     if not choice:
@@ -188,6 +228,7 @@ def press_add(page: Page, button_id: str) -> str:
 # ---------- moving through the application ----------
 
 def open_application(page: Page, job_url: str) -> None:
+    _options.clear()
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(8000)
     wait_out_bot_check(page, "opening the job page")
@@ -273,6 +314,7 @@ def after_submit_page(page: Page) -> dict | None:
     """What a press led to: sign in if asked, then the next page's questions go to the next
     approval card; None when there's nothing left to fill or press."""
     sign_in_if_asked(page)
+    _options.clear()  # a new step: its dropdowns are read fresh
     snapshot = read_page(page)
     if snapshot["errors"] and not snapshot["fields"]:
         raise Blocked(f"Raise refused the page: {'; '.join(snapshot['errors'])[:300]}")

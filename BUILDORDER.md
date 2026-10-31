@@ -176,7 +176,14 @@ with something Ali can run and see working.
 - ✅ Employer Email postings (`applier/email_apply.py`): the agent drafts the email and
   posts it as a card; Ali sends it from his Outlook and taps Submit ("I sent it"). Sent:
   Terra Sense, SeisWare, Baytex, Validere.
-- Still to do in Phase 7: Raise (Enbridge 152806, due Nov 11), BambooHR (Convverge), ADP
+- ✅ **Raise** (`applier/raise_jobs.py`), tested on Enbridge: 1 application. A Salesforce
+  app in an iframe with shadow DOM, so fields are found with Playwright locators and each
+  question's text comes from its `single-question` block. Every page counts as final (the
+  buttons "Apply with Resume" and "Submit Application" only move to the next step), so it
+  took 3 approvals. Styled checkboxes and radios need a real click on the label's left
+  edge, scrolled into view first. The Terms checkbox is ticked (Ali approved); SMS consent
+  never is.
+- Still to do in Phase 7: BambooHR (Convverge), ADP
   (Peters & Co.), Oleeo (Morgan Stanley), custom sites (TCS, Tourmaline), and possibly a
   generic fallback driver for simple unknown sites.
 - ✅ "Accumulate Online" postings: apply inside Elevate itself (`elevate/apply.py`), same

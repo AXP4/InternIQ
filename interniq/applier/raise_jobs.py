@@ -238,7 +238,8 @@ def open_application(page: Page, job_url: str) -> None:
     _job_title["text"] = heads[0].strip() if heads else ""
     if "apply.raise.jobs" not in content(page).url:
         raise Blocked("The job page has no Raise application form (closed posting?)")
-    page.locator("#apply-form").scroll_into_view_if_needed()
+    if page.locator("#apply-form").count():  # a job page wrapping the form; direct links have none
+        page.locator("#apply-form").scroll_into_view_if_needed()
 
 
 def page_job_title(page: Page) -> str:

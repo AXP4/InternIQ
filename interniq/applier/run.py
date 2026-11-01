@@ -11,7 +11,7 @@ import re
 import time
 
 from interniq import browser, db, discord_bot
-from interniq.applier import avature, eightfold, greenhouse, icims, oracle, raise_jobs
+from interniq.applier import avature, eightfold, generic, greenhouse, icims, oracle, raise_jobs
 from interniq.applier import workday as wd
 from interniq.applier.filler import Filler
 from interniq.elevate import apply as elevate_apply
@@ -179,9 +179,9 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     conn = db.connect()
     posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
     decision = conn.execute("SELECT form_term FROM decisions WHERE posting_id = ?", (posting_id,)).fetchone()
-    driver = DRIVERS.get(posting["site"] or "")
-    if driver is None:
-        raise SystemExit(f"No applier for site {posting['site']!r} yet ({posting_id})")
+    if posting["site"] in ("email", "manual", None) and not job_url:
+        raise SystemExit(f"{posting_id} has no application website (site {posting['site']!r})")
+    driver = DRIVERS.get(posting["site"] or "", generic)  # any other site: the catch-all driver
     docs = documents(posting_id)
     url = job_url or posting["link"]
     folder = package.OUTPUT_DIR / str(posting_id)

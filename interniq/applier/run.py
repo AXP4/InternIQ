@@ -453,9 +453,15 @@ def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -
                 print(f"  stopped: {e}")
                 if len(posting_ids) == 1:
                     raise
-    if not inside_elevate and not dry and intent.pending(conn) and not db.get_setting(conn, "elevate_blocked", ""):
-        # One Chrome visit for every "I intend to apply" this run queued.
-        with browser.open_browser(elevate=True) as context:
-            lines = intent.express_all(context)
-        print("\n".join(lines))
-        discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID", "Elevate 'I intend to apply':\n" + "\n".join(lines)))
+    if not inside_elevate and not dry:
+        intent_visit(conn)
+
+
+def intent_visit(conn) -> None:
+    """One Chrome visit for every "I intend to apply" this run queued."""
+    if not intent.pending(conn) or db.get_setting(conn, "elevate_blocked", ""):
+        return
+    with browser.open_browser(elevate=True) as context:
+        lines = intent.express_all(context)
+    print("\n".join(lines))
+    discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID", "Elevate 'I intend to apply':\n" + "\n".join(lines)))

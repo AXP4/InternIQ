@@ -1,18 +1,21 @@
 """Applications that go by email ("Employer Email" postings).
 
 The agent writes the package and a short email (subject and body), then posts a card in
-#approvals with the address, the text, and the PDFs to attach. Ali sends it from his own
-Outlook (the agent has no access to his university mailbox) and taps Submit on the card,
-which here means "I sent it": the application is recorded as submitted and the Elevate
-"I intend to apply" click follows.
+#approvals with the address, the text, and the PDFs. Ali's Submit tap approves it; the
+agent then sends it from his UCalgary Outlook (outlook.py), confirms it in Sent Items,
+records it as submitted, and clicks Elevate "I intend to apply".
 """
+
+import time
+from pathlib import Path
+
 
 import json
 import re
 
 import anthropic
 
-from interniq import config, db, discord_bot
+from interniq import browser, config, db, discord_bot, outlook
 from interniq.applier import run
 from interniq.elevate import apply as elevate_apply
 from interniq.elevate import clean_title
@@ -81,16 +84,21 @@ def card(posting: dict, draft: dict, files: list) -> discord_bot.Card:
         f"**To:** {posting['email']}",
         f"**Subject:** {draft['subject']}",
         f"```\n{draft['body']}\n```",
-        f"📎 Attach the {len(files)} PDFs below. Send it from your UCalgary Outlook, then tap **✅ Submit** "
-        "here to record it as sent (that also queues the Elevate \"I intend to apply\"). Fix rewrites, Skip skips.",
+        f"📎 {len(files)} PDFs attached below. Tap **✅ Submit** and the agent sends it from your UCalgary "
+        "Outlook, checks Sent Items, and clicks the Elevate \"I intend to apply\". Fix rewrites, Skip skips.",
     ])
     return discord_bot.Card(text[:1990], "approve", posting["id"], files)
 
 
 def run_email(posting_ids: list[int]) -> None:
     conn = db.connect()
+    waiting = {}
     for posting_id in posting_ids:
         posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
+        app = db.get_application(conn, posting_id)
+        if app and app["state"] == "approved" and app["site"] == "email":  # tapped on an earlier card
+            waiting[posting_id] = posting
+            continue
         summary = package.load_summary(posting_id)
         if not summary:
             raise SystemExit(f"No package for {posting_id}. Run `python -m interniq write {posting_id}` first.")
@@ -107,6 +115,51 @@ def run_email(posting_ids: list[int]) -> None:
         (folder / "email.txt").write_text(f"To: {posting['email']}\nSubject: {draft['subject']}\n\n{draft['body']}\n",
                                           encoding="utf-8")
         db.propose_application(conn, posting_id, [p.name for p in files], "email")
-        db.set_application_notes(conn, posting_id, {"email": draft, "to": posting["email"]})
+        db.set_application_notes(conn, posting_id, {"email": draft, "to": posting["email"],
+                                                    "paths": [str(p) for p in files]})
         discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID", [card(posting, draft, files)]))
         print(f"{posting_id}: email card posted ({draft['subject']})")
+        waiting[posting_id] = posting
+    send_approved(conn, waiting)
+
+
+def send_approved(conn, waiting: dict) -> None:
+    """Wait for Ali's taps; send each approved email from Outlook (never anything else)."""
+    deadline = time.time() + run.APPROVAL_WAIT_HOURS * 3600
+    sent_any = False
+    with browser.open_browser() as context:
+        while waiting and time.time() < deadline:
+            for posting_id, posting in list(waiting.items()):
+                app = db.get_application(conn, posting_id)
+                if app["state"] in ("skipped", "fixing", "submitted"):
+                    print(f"{posting_id}: {app['state']}; not sending")
+                    del waiting[posting_id]
+                    continue
+                if app["state"] != "approved":
+                    continue
+                del waiting[posting_id]
+                notes = json.loads(app["notes"] or "{}")
+                draft = notes["email"]
+                files = [Path(p) for p in notes.get("paths", [])]
+                if not files or not all(f.exists() for f in files):
+                    print(f"{posting_id}: attachments missing; run `python -m interniq email {posting_id}` again")
+                    continue
+                label = f"{posting['org']}, {clean_title(posting['title'])}"
+                try:
+                    outlook.send(context, notes["to"], draft["subject"], draft["body"], files)
+                except outlook.OutlookError as e:
+                    print(f"{posting_id}: not sent ({e})")
+                    discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
+                                                      f"⚠️ {label} (`{posting_id}`): the email was NOT sent ({e}). "
+                                                      "Send it from Outlook yourself or tell me to retry."))
+                    continue
+                db.mark_submitted(conn, posting_id)
+                sent_any = True
+                message = f"📨 **Sent** {label} (`{posting_id}`) from your Outlook to {notes['to']} (it is in Sent Items)."
+                print(message)
+                discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID",
+                                                  message + "\n" + run.after_submit(context, conn, posting_id)))
+            if waiting:
+                time.sleep(10)
+    if sent_any:
+        run.intent_visit(conn)

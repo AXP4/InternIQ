@@ -328,8 +328,13 @@ class ApprovalButton(discord.ui.DynamicItem[discord.ui.Button],
             return
         conn = db.connect()
         app = db.get_application(conn, self.posting_id)
-        if self.action == "submit" and app and app["site"] in ("email", "manual") and app["state"] != "submitted":
-            # Email and submit-it-yourself applications are sent by Ali; Submit means "I did it".
+        if self.action == "submit" and app and app["site"] == "email" and app["state"] not in ("submitted", "approved"):
+            # The waiting `email` run sends it from Ali's Outlook and reports in #log.
+            db.set_application_state(conn, self.posting_id, "approved")
+            result = ("✅ **Approved.** Sending it from your Outlook now; the result goes to #log. (If no `email` "
+                      f"run is waiting, start one: `python -m interniq email {self.posting_id}`.)")
+        elif self.action == "submit" and app and app["site"] == "manual" and app["state"] != "submitted":
+            # Submit-it-yourself applications are sent by Ali; Submit means "I did it".
             db.mark_submitted(conn, self.posting_id)
             result = ("📨 **Recorded as sent.** Elevate \"I intend to apply\" is queued: "
                       "`python -m interniq intend` (after `unblock` while Elevate is blocked).")

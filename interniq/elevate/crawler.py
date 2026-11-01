@@ -15,6 +15,7 @@ from interniq.elevate import JOBS_URL
 
 QUICK_SEARCH = "ENSF Jobs"
 LOGIN_WAIT_MS = 15 * 60 * 1000  # how long to wait for Ali to finish a manual login
+MAX_NEW_PER_RUN = 15  # postings opened per crawl; the first crawl opened 63 in a row and got blocked
 FORBIDDEN_CLICKS = {"apply", "applied", "shortlist", "unshortlist", "not interested", "i intend to apply"}
 
 # One dict per results row. Columns are found relative to the ID cell, because
@@ -207,7 +208,11 @@ def crawl(context: BrowserContext) -> dict:
         if row["id"] in known:
             db.touch(conn, row["id"], row["elevate_status"])
             continue
-        browser.pause()
+        if new >= MAX_NEW_PER_RUN:
+            print(f"  stopping at {MAX_NEW_PER_RUN} new postings this run; the rest wait for the next one")
+            break
+        browser.pause(6, 12)  # polite: one posting at a time, never in parallel
+        stop_if_blocked(page)
         posting = to_posting(row, read_posting(context, page, row["id"]))
         db.save_posting(conn, posting)
         new += 1

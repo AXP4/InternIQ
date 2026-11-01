@@ -10,7 +10,7 @@ import json
 
 import anthropic
 
-from interniq import config, db
+from interniq import config, db, outlook
 from interniq.applier import answers
 from interniq.applier import workday as wd
 
@@ -187,6 +187,16 @@ class Filler:
             if name == "read_page":
                 return compact(self.driver.read_page(page))
             if name == "ask_ali":
+                if outlook.CODE_WORDS.search(args["question"]):
+                    # An emailed one-time code: read it from Ali's inbox before bothering him.
+                    try:
+                        code = outlook.latest_code(page.context)
+                    except outlook.OutlookError as e:
+                        code = None
+                        print(f"  Outlook: {e}")
+                    if code:
+                        print("  read the emailed code from Outlook")
+                        return f"Code read from Ali's inbox (newest code email): {code}"
                 answer = answers.ask_ali(args["question"], self.label, self.posting.get("id"))
                 return f"Ali answered: {answer}" if answer else "Ali didn't answer in time. Leave it empty if optional; otherwise record_unsure and move on."
             if name == "record_legal":

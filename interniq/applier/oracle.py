@@ -116,7 +116,16 @@ def select_search(page: Page, field_id: str, value: str) -> str:
 def upload(page: Page, field_id: str, path: str) -> str:
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
     box = field(page, field_id)
+    importer = (box.get_attribute("aria-label") or "").startswith("Resume (import")
+    if importer and "resume" not in name.lower():
+        # Oracle rebuilds the whole profile from whatever lands here (it once imported the
+        # profile from the cover letter), so only the resume ever goes in this box.
+        return f"refused: the Import your profile box takes only the resume; put {name} in its own box below"
     box.set_input_files(path)
+    if importer:  # the page reloads with "Profile successfully imported"; values set before are gone
+        page.wait_for_timeout(8000)
+        return (f"ok ({name} imported; the page reloaded and re-filled the profile from it). "
+                "Now call read_page and set every other answer again: nothing set before the import survived.")
     for _ in range(10):
         page.wait_for_timeout(1500)
         if name.rsplit(".", 1)[0] in page.locator("body").inner_text():

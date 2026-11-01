@@ -176,6 +176,12 @@ with something Ali can run and see working.
 - ✅ Employer Email postings (`applier/email_apply.py`): the agent drafts the email and
   posts it as a card; Ali sends it from his Outlook and taps Submit ("I sent it"). Sent:
   Terra Sense, SeisWare, Baytex, Validere.
+- ✅ **Outlook** (`outlook.py`): emailed codes are read from Ali's inbox (Ask on Discord only
+  as a fallback), and approved email applications are sent by the agent from his Outlook
+  and confirmed in Sent Items.
+- ✅ **Oracle** (`applier/oracle.py`), Seaspan: 1 application. Pill buttons, address search
+  boxes (never opened just to read them: that wipes Address Line 1), multi-selects read from
+  their pills, resume import, and Experience/Education entries fixed via Edit/SAVE.
 - ✅ **Raise** (`applier/raise_jobs.py`), tested on Enbridge: 1 application. A Salesforce
   app in an iframe with shadow DOM, so fields are found with Playwright locators and each
   question's text comes from its `single-question` block. Every page counts as final (the

@@ -156,8 +156,13 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   Application Submitted list. `apply <ids...>` picks this path from the posting's procedure.
 - **Employer Email** postings (`applier/email_apply.py`, `email <ids...>`): the agent writes
   the package and a short email (no dashes, no contractions), and the card shows To,
-  Subject, Body and the PDFs. Ali sends it from his university Outlook (the agent has no
-  access to it); on an email card, Submit means "I sent it" and records the submission.
+  Subject, Body and the PDFs. Ali's Submit tap approves it; the waiting `email` run then
+  sends it from his university Outlook and confirms it in Sent Items before recording it.
+- **Outlook** (`interniq/outlook.py`): Outlook on the web in the agent's browser (Ali's saved
+  UCalgary login). `latest_code` reads an emailed one-time code from the newest matching
+  inbox preview (only messages from the last 10 minutes that look like code emails), so the
+  filler asks Ali only when none arrives; `send` composes, attaches, sends, and checks Sent
+  Items. It never deletes, forwards, or replies, and logs no message text.
 
 ### 6. Discord bot (`interniq/discord_bot.py`)
 - Private server, one channel per purpose: `#approvals`, `#questions`, `#log`.

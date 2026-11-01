@@ -344,7 +344,11 @@ def files_on_review(page: Page, expected: list[str], timeout_s: int = 10) -> lis
 
 def submitted(page: Page) -> bool:
     text = page.locator("body").inner_text().lower()
-    return any(phrase in text for phrase in SUBMITTED_TEXT)
+    if any(phrase in text for phrase in SUBMITTED_TEXT):
+        return True
+    # Seaspan's submit lands on the profile's "My Applications" list instead of a thank-you page.
+    title = _job_title["text"].lower()
+    return "active job applications" in text and bool(title) and title in text and "applied on" in text
 
 
 def submit(page: Page, posting_id: int) -> bool:

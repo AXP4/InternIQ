@@ -14,7 +14,7 @@ from playwright.sync_api import Page
 
 from interniq import db
 from interniq.applier import eightfold as ef
-from interniq.applier.workday import Blocked, wait_out_bot_check
+from interniq.applier.workday import Blocked, best_option, wait_out_bot_check
 
 SITE = "oracle"
 SHOWS_FILES_ON_REVIEW = True
@@ -24,8 +24,8 @@ SUBMITTED_TEXT = ["thank you for applying", "thank you for your application", "a
                   "we received your application", "your application was submitted", "you applied"]
 _job_title = {"text": ""}
 
-field, describe, fill_text, select_option = ef.field, ef.describe, ef.fill_text, ef.select_option
-select_search, choose_radio, set_checkbox, set_date = ef.select_search, ef.choose_radio, ef.set_checkbox, ef.set_date
+field, describe, select_option = ef.field, ef.describe, ef.select_option
+choose_radio, set_checkbox, set_date = ef.choose_radio, ef.set_checkbox, ef.set_date
 press_add = ef.press_add
 
 
@@ -42,12 +42,75 @@ def step_name(page: Page) -> str:
     return heads[0][:80] if heads else "Application"
 
 
+CODE_ID = "verification_code"
+# Inputs tagged before the snapshot: the emailed PIN boxes, the "Import your profile"
+# resume box at the top (no label of its own), and type-to-search boxes (address).
+TAG_JS = r"""
+() => {
+  const text = e => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
+  for (const e of document.querySelectorAll('input[type=file]')) {
+    let b = e; for (let i = 0; i < 6 && b && !text(b); i++) b = b.parentElement;
+    const t = text(b);
+    if (/import your profile|apply with resume/i.test(t)) e.setAttribute('aria-label', 'Resume (import at the top: upload the resume here)');
+    else if (!e.getAttribute('aria-label')) e.setAttribute('aria-label', t.slice(0, 120) || 'Supporting document');
+  }
+}
+"""
+
+
+def pin_boxes(page: Page) -> list:
+    return page.locator("input.pin-code-input__input:visible").all()
+
+
 def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
+    pins = pin_boxes(page)
+    if pins:  # "Confirm Your Identity": one field for the whole emailed code
+        return {"step": "Confirm Your Identity", "add_buttons": [], "errors": [],
+                "fields": [{"id": CODE_ID, "kind": "text", "required": True, "value": "",
+                            "label": f"Verification code ({len(pins)} digits, just emailed to Ali; ask him for it)"}]}
+    page.evaluate(TAG_JS)
     snapshot = ef.read_page(page)
+    for f in snapshot["fields"]:
+        box = field(page, f["id"])
+        if f["kind"] == "select" and box.get_attribute("class") and "cx-select-input" in box.get_attribute("class"):
+            f["note"] = "type-to-search box: use select_search with the value (e.g. the address or city)"
     snapshot["fields"] = [f for f in snapshot["fields"] if "honeypot" not in f["label"].lower()]
     snapshot["step"] = step_name(page)
     return snapshot
+
+
+def fill_text(page: Page, field_id: str, value: str) -> str:
+    if field_id != CODE_ID:
+        return ef.fill_text(page, field_id, value)
+    code = re.sub(r"\s", "", value)
+    pins = pin_boxes(page)
+    if len(code) != len(pins):
+        return f"the code needs {len(pins)} digits, got {len(code)}"
+    pins[0].click()
+    page.keyboard.type(code, delay=150)  # each box moves the focus to the next one
+    got = "".join(p.input_value() for p in pin_boxes(page))
+    return "ok" if got == code else f"the code boxes show {got!r}, not {code!r}"
+
+
+def select_search(page: Page, field_id: str, value: str) -> str:
+    """Oracle's type-to-search boxes (address, postal code, city, province): type, then
+    pick the matching suggestion; if none appears, keep the typed text."""
+    box = field(page, field_id)
+    box.click()
+    box.fill(value)
+    page.wait_for_timeout(2500)  # suggestions come from a map service
+    listbox = box.get_attribute("aria-controls")
+    options = page.locator(f'[id="{listbox}"] [role="option"], [id="{listbox}"] [role="gridcell"]').all() if listbox else []
+    names = [o.inner_text().strip() for o in options if o.inner_text().strip()]
+    choice = best_option(names, value) if names else None
+    if choice:
+        options[names.index(choice)].click()
+    else:
+        page.keyboard.press("Tab")
+    page.wait_for_timeout(1000)
+    got = box.input_value()
+    return f"ok (shows {got!r})" if got.strip() else f"nothing stuck; suggestions were {names[:10]}"
 
 
 def upload(page: Page, field_id: str, path: str) -> str:

@@ -13,19 +13,26 @@ from playwright.sync_api import BrowserContext, sync_playwright
 from interniq import config
 
 PROFILE_DIR = config.ROOT / "data" / "browser_profile"
+# Elevate runs in Ali's installed Google Chrome with its own profile: a real browser
+# session at a polite pace, as the Elevate team suggested (Cloudflare turned away the
+# bundled test browser). Employer sites keep the original profile and its logins.
+ELEVATE_PROFILE_DIR = config.ROOT / "data" / "elevate_profile"
 
 
 @contextmanager
-def open_browser():
+def open_browser(elevate: bool = False):
     """Yield a headed, persistent browser context and close it afterwards."""
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    profile = ELEVATE_PROFILE_DIR if elevate else PROFILE_DIR
+    profile.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         context: BrowserContext = p.chromium.launch_persistent_context(
-            PROFILE_DIR,
+            profile,
+            channel="chrome" if elevate else None,
             headless=False,
             no_viewport=True,
             args=["--start-maximized"],
         )
+        context.interniq_elevate = elevate  # lets callers know which browser this is
         try:
             yield context
         finally:

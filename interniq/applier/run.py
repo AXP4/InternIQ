@@ -159,6 +159,10 @@ def after_submit(context, conn, posting_id: int) -> str:
     in a single Elevate visit once Ali has run `unblock`."""
     if db.get_setting(conn, "elevate_blocked", ""):
         return "Elevate 'I intend to apply': queued (Elevate is blocked); `python -m interniq intend` after `unblock`."
+    if not getattr(context, "interniq_elevate", False):
+        # Employer sites use their own browser; Elevate runs in Chrome. The click happens
+        # in one Chrome visit at the end of this run (see run()).
+        return "Elevate 'I intend to apply': queued for the Chrome visit at the end of this run."
     lines = []
     for pid in [posting_id] + duplicates_of(conn, posting_id):
         try:
@@ -427,7 +431,14 @@ def run_elevate(context, page, posting_id: int) -> None:
 def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -> None:
     """One browser session for every posting, in order. A posting that gets stuck is
     reported and the session moves on to the next one."""
-    with browser.open_browser() as context:
+    conn = db.connect()
+    procedures = {r["id"]: r["procedure"] for r in conn.execute(
+        f"SELECT id, procedure FROM postings WHERE id IN ({','.join('?' * len(posting_ids))})", posting_ids)}
+    inside_elevate = [p for p in posting_ids if procedures.get(p) == "Accumulate Online" and not dry]
+    if inside_elevate and len(inside_elevate) != len(posting_ids):
+        raise SystemExit("Run postings applied to inside Elevate separately from employer-site ones "
+                         f"(Elevate: {inside_elevate})")
+    with browser.open_browser(elevate=bool(inside_elevate)) as context:
         page = browser.page_of(context)
         for posting_id in posting_ids:
             print(f"Applying to {posting_id}...")
@@ -442,3 +453,9 @@ def run(posting_ids: list[int], job_url: str | None = None, dry: bool = False) -
                 print(f"  stopped: {e}")
                 if len(posting_ids) == 1:
                     raise
+    if not inside_elevate and not dry and intent.pending(conn) and not db.get_setting(conn, "elevate_blocked", ""):
+        # One Chrome visit for every "I intend to apply" this run queued.
+        with browser.open_browser(elevate=True) as context:
+            lines = intent.express_all(context)
+        print("\n".join(lines))
+        discord_bot.call(discord_bot.send("DISCORD_LOG_CHANNEL_ID", "Elevate 'I intend to apply':\n" + "\n".join(lines)))

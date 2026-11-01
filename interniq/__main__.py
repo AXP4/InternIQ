@@ -15,7 +15,7 @@ def login() -> None:
     """Open Elevate so Ali can log in once; the profile remembers it."""
     from interniq import browser, elevate
 
-    with browser.open_browser() as context:
+    with browser.open_browser(elevate=True) as context:
         page = browser.page_of(context)
         page.goto(elevate.JOBS_URL)
         print("Log in to Elevate in the browser window, then close the window.")
@@ -28,7 +28,7 @@ def crawl() -> None:
     from interniq import browser, db, sites
     from interniq.elevate import crawler
 
-    with browser.open_browser() as context:
+    with browser.open_browser(elevate=True) as context:
         print("Reading Elevate...")
         counts = crawler.crawl(context)
         flagged = sites.check_links(context, db.connect())
@@ -159,7 +159,7 @@ def intend(posting_id: str = "") -> None:
 
     from interniq import db
 
-    with browser.open_browser() as context:
+    with browser.open_browser(elevate=True) as context:
         if posting_id:
             print(intent.express_intent(context, int(posting_id)))
         else:  # every submitted application still missing the click, in one visit

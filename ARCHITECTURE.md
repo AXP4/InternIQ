@@ -136,8 +136,8 @@ it up. If something breaks halfway, the agent can resume from the last saved sta
   another page with questions instead of a confirmation (EA's extra pages, Greenhouse's
   emailed security code), it's filled (asking Ali when needed) and gets its own approval
   card before the next press.
-- Safety checks before anything is saved: form name fields hold the legal name (Ali
-  LEGALNAME; "Alanizi" only in preferred-last-name fields), the page's job title
+- Safety checks before anything is saved: form name fields hold the legal name (from
+  the private answer bank; "Alanizi" only in preferred-last-name fields), the page's job title
   matches the posting (term words like Fall/Spring must agree), and parser-filled skill
   tags are replaced with profile facts only.
 - After a confirmed submit, `elevate/intent.py` clicks "I intend to apply" on Elevate and

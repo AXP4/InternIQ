@@ -101,7 +101,7 @@ def answers_report(filler: Filler) -> str:
 
 def check_names(filler: Filler) -> None:
     """Stop before leaving a step if a form field still holds Ali's resume name. Forms
-    always get his legal name (Ali LEGALNAME); "Alanizi" belongs only on the resume
+    always get his legal name (answers.yaml); "Alanizi" belongs only on the resume
     and cover letter. Runs before Next, since leaving a step can save it (EA creates the
     account when Personal Information is left)."""
     wrong = [f"{step['step']}: {f.get('label')} = {f.get('value')!r}"
@@ -110,7 +110,7 @@ def check_names(filler: Filler) -> None:
              and "linkedin" not in (f.get("value") or "").lower()
              and "preferred" not in (f.get("label") or "").lower()]
     if wrong:
-        raise wd.Blocked("A form field has 'Alanizi' instead of the legal name LEGALNAME "
+        raise wd.Blocked("A form field has 'Alanizi' instead of the legal name "
                          "(nothing past this step was saved): " + "; ".join(wrong)[:600])
 
 

@@ -95,7 +95,7 @@ Keep the profile to 2 lines.
   term through August 2028, and would welcome the chance to talk." When the job is outside
   Calgary, insert "am ready to relocate to {city}," before "and would welcome".
 - The Re: line is the job title only, with no term.
-- Header: "ALI ALANIZI (legal name: Ali LEGALNAME)" and the contact line.
+- Header: "ALI ALANIZI (legal name: <legal name from answers.yaml>)" and the contact line.
 
 ### AI workflow mention
 - If the posting is AI positive (mentions AI assisted development, AI coding tools, Copilot,

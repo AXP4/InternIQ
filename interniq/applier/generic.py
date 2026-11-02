@@ -270,7 +270,7 @@ def open_application(page: Page, job_url: str) -> None:
     dismiss_cookies(page)
     if visible_inputs(page) >= 3 or password_page(page):
         return  # the form (or a sign-in) is already on the page
-    apply = [b for b in page.locator("a:visible, button:visible").all() if APPLY_TEXT.match(button_text(b))]
+    apply = [b for b in page.locator("a:visible").all() + buttons(page) if APPLY_TEXT.match(button_text(b))]
     if not apply:
         raise Blocked("No Apply button on the job page (closed posting, or the site needs its own driver)")
     href = apply[0].get_attribute("href")

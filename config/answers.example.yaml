@@ -1,0 +1,73 @@
+# Copy to config/answers.yaml (gitignored) and replace every TODO with your own answers.
+# The agent fills forms only from this file (plus config/learned_answers.yaml, where it
+# saves what you answer on Discord). Anything missing is asked, never guessed.
+
+contact:
+  legal_first_name: TODO
+  legal_middle_name: TODO      # leave empty if none
+  legal_last_name: TODO
+  preferred_first_name: TODO
+  preferred_last_name: TODO    # used only in fields that ask for a preferred last name
+  professional_name: TODO      # the name on your resume and cover letter
+  email: TODO
+  phone: TODO
+  city: TODO
+  province: TODO
+  country: TODO
+  address: TODO                # only if a form requires a street address
+  postal_code: TODO
+  linkedin: TODO
+  github: TODO
+  websites: []
+
+education:
+  school: TODO
+  faculty: TODO
+  degree: TODO
+  program: TODO
+  year: TODO
+  gpa: TODO
+  expected_graduation: TODO
+  enrolled_in_coop_program: true
+  returning_to_school_after_term: true
+  transcript_available: true
+
+work_authorization:
+  # LEGAL: always shown on the approval card for you to confirm.
+  legally_eligible_to_work_in_canada: TODO
+  requires_sponsorship: TODO
+  citizenship_for_export_control: TODO
+  current_or_former_employee_of_company: false
+
+availability:
+  available: TODO              # e.g. January 2027 through August 2028
+  # When a form makes you pick a term length: choose from its options in this order.
+  term_preference_order: [12, 16, 8, 4]
+  open_to_terms: [4, 8, 12, 16]
+  notice_period: TODO
+  willing_to_relocate: TODO
+  comfortable_with_hybrid: TODO
+  comfortable_onsite_full_time: TODO
+  drivers_license: TODO
+
+compensation:
+  hourly_target: TODO          # pick the band on the form that covers this
+  annual_target: TODO
+
+experience:
+  current_employer: TODO
+  current_title: TODO
+  start: TODO
+  description: TODO
+
+languages:
+  - {language: TODO, level: TODO}
+
+skill_levels:   # be honest; forms never get a higher level than this
+  Python: TODO
+  SQL: TODO
+  Git: TODO
+
+misc:
+  how_did_you_hear: TODO
+  skills_field: TODO

@@ -6,17 +6,16 @@ agent then sends it from his UCalgary Outlook (outlook.py), confirms it in Sent 
 records it as submitted, and clicks Elevate "I intend to apply".
 """
 
+import json
+import re
 import time
 from pathlib import Path
 
-
-import json
-import re
-
 import anthropic
+import yaml
 
 from interniq import browser, config, db, discord_bot, outlook
-from interniq.applier import run
+from interniq.applier import answers, run
 from interniq.elevate import apply as elevate_apply
 from interniq.elevate import clean_title
 from interniq.writer import package
@@ -34,7 +33,7 @@ Rules:
   "it is", never "I'm", "I'd", "I've", "don't", "it's".
 - One closing line before the signature (for example "Thank you for your time."), never two.
 - Claim nothing that is not in the cover letter or the facts given.
-- Signature lines, exactly: "Ali Alanizi", "PHONE_REMOVED", "EMAIL_REMOVED".
+- Signature lines, exactly the three lines given in <signature>.
 - The posting's own application instructions win over the rules above: if it names an exact
   subject line, use it word for word (dashes and colons included). If it asks for the
   documents combined into one PDF with a given file name, return that name in
@@ -47,11 +46,20 @@ CONTRACTIONS = re.compile(r"\b(?:\w+n['’]t|I['’](?:m|d|ve|ll)|\w+['’](?:re
                           r"(?:it|that|there|here|what|who|he|she|let)['’]s)\b", re.I)
 
 
+def signature() -> str:
+    """Name, phone, and email from the private answer bank (never written into the code)."""
+    contact = yaml.safe_load(answers.ANSWERS.read_text(encoding="utf-8"))["contact"]
+    digits = re.sub(r"\D", "", str(contact["phone"]))
+    phone = f"{digits[:3]} {digits[3:6]} {digits[6:]}" if len(digits) == 10 else str(contact["phone"])
+    return "\n".join([contact["professional_name"], phone, contact["email"]])
+
+
 def compose(posting: dict, summary: dict, attachments: list[str]) -> dict:
     client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
     letter = "\n\n".join(summary["package"].get("paragraphs", []))
     keys = ("org", "title", "location", "email", "additional_info", "description")
-    prompt = (f"<posting>{json.dumps({k: posting[k] for k in keys})}</posting>\n"
+    prompt = (f"<signature>\n{signature()}\n</signature>\n"
+              f"<posting>{json.dumps({k: posting[k] for k in keys})}</posting>\n"
               f"<cover_letter>{letter}</cover_letter>\n"
               f"<attachments>{json.dumps(attachments)}</attachments>\n"
               "Mention only the documents actually attached (or, if you return single_pdf_name, "
@@ -64,7 +72,7 @@ def compose(posting: dict, summary: dict, attachments: list[str]) -> dict:
         draft = json.loads(text[text.find("{"): text.rfind("}") + 1])
         # A subject the posting dictates word for word may contain dashes; Ali's own words may not.
         subject = "" if draft["subject"].strip() and draft["subject"].strip() in posting_text else draft["subject"]
-        visible = subject + draft["body"].replace("EMAIL_REMOVED", "")
+        visible = subject + draft["body"].replace(config.require("APPLY_EMAIL"), "")
         problems = []
         if DASHES.search(visible):
             problems.append("a dash or hyphen")

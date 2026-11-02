@@ -189,7 +189,10 @@ def read_page(page: Page) -> dict:
         elif "options" in fix:
             f["options"], f["value"] = fix["options"], fix["value"]
         if f["kind"] == "select" and "options" not in f:
-            f["options"] = ef.combobox_options(page, f["id"])[:60]
+            try:
+                f["options"] = ef.combobox_options(page, f["id"])[:60]
+            except Exception:  # covered by an overlay (e.g. after a submit): leave it unread
+                f["options"] = []
         if f["kind"] == "select" and not f.get("options") and not fix.get("menu"):
             f["note"] = "type-to-search box: use select_search with the value"
         f.pop("list", None)
@@ -396,13 +399,20 @@ def submit(page: Page, posting_id: int) -> bool:
     button.click()
     page.wait_for_timeout(8000)
     wait_out_bot_check(page, "submitting")
+    shown = page.locator('[role="alert"]:visible, [role="status"]:visible, [aria-live]:visible, '
+                         '[class*="success" i]:visible, [class*="toast" i]:visible').all_inner_texts()
+    print(f"  after Submit the page shows: {' | '.join(t.strip() for t in shown if t.strip())[:300] or '(no message)'}")
     return submitted(page)
 
 
 def after_submit_page(page: Page) -> dict | None:
     """After a press with no confirmation: the form's own errors stop the run; a new page
     with questions gets an Approval 2 card; anything else is left to the confirmation check."""
-    snapshot = read_page(page)
+    try:
+        snapshot = read_page(page)
+    except Exception as e:  # the page is changing under us: let the confirmation check decide
+        print(f"  couldn't read the page after Submit ({type(e).__name__}); checking for a confirmation")
+        return None
     if snapshot["errors"] and submit_button(page) is not None:
         raise Blocked(f"The site refused the submit: {'; '.join(snapshot['errors'])[:300]}")
     return snapshot if snapshot["fields"] and not submitted(page) and is_review(page) else None

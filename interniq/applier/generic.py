@@ -208,12 +208,20 @@ def read_page(page: Page) -> dict:
             f["value"] = ", ".join(field(page, f["id"]).evaluate("e => [...e.files].map(x => x.name)"))
     if password_page(page):
         fields = [f for f in fields if "password" not in f["label"].lower()]
+    _labels.update({f["id"]: f["label"] for f in fields})
     return {"step": step_name(page), "fields": fields, "add_buttons": page.evaluate(ADD_JS),
             "errors": sorted(set(page.evaluate(ef.ERRORS_JS)))[:15]}
 
 
+_labels: dict[str, str] = {}  # field id -> question, from the last read_page
+
+
 def choose_radio(page: Page, field_id: str, value: str) -> str:
-    """Radio labels may be <label for>, a wrapping <label>, or the value attribute."""
+    """Radio labels may be <label for>, a wrapping <label>, or the value attribute. Sites
+    that redraw their radios (ADP) lose the field's tag, so the choice is then found by
+    the question text and the answer text."""
+    if not field(page, field_id).count():
+        return choose_radio_by_text(page, _labels.get(field_id, ""), value)
     name = field(page, field_id).get_attribute("name")
     group = page.locator(f'input[type="radio"][name="{name}"]').all()
     labels = [r.evaluate("""r => {
@@ -226,6 +234,31 @@ def choose_radio(page: Page, field_id: str, value: str) -> str:
     radio = group[labels.index(choice)]
     radio.check(force=True)
     return "ok" if radio.is_checked() else f"clicked {choice!r} but it isn't selected"
+
+
+def choose_radio_by_text(page: Page, question: str, value: str) -> str:
+    """The radio named `value` right below the question text (role queries reach into
+    custom elements)."""
+    if not question:
+        return "that question is gone; call read_page and use the new id"
+    anchor = page.get_by_text(question[:80], exact=False).first
+    if not anchor.count():
+        return f"couldn't find the question {question[:60]!r} on the page"
+    anchor.scroll_into_view_if_needed()
+    top = anchor.bounding_box()["y"]
+    pattern = re.compile(rf"^\s*{re.escape(value.strip())}\s*$", re.I)
+    below = []
+    for radio in page.get_by_role("radio", name=pattern).all():
+        box = radio.bounding_box()
+        if box and box["y"] > top - 5:
+            below.append((box["y"], radio))
+    if not below:
+        return f"no {value!r} choice found under {question[:60]!r}"
+    radio = min(below, key=lambda pair: pair[0])[1]
+    radio.click(force=True)
+    page.wait_for_timeout(600)
+    checked = radio.get_attribute("aria-checked") == "true" or radio.evaluate("e => !!e.checked")
+    return f"ok (picked {value!r})" if checked else f"clicked {value!r} under the question; it doesn't read as selected"
 
 
 def upload(page: Page, field_id: str, path: str) -> str:

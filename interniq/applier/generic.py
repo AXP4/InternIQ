@@ -267,7 +267,8 @@ def open_application(page: Page, job_url: str) -> None:
     wait_out_bot_check(page, "opening the job page")
     heads = page.locator("h1:visible").all_inner_texts()
     _job_title["text"] = heads[0].strip() if heads else page.title().split(" | ")[0].split(" - ")[0].strip()
-    if visible_inputs(page) >= 3 or is_review(page) or password_page(page):
+    dismiss_cookies(page)
+    if visible_inputs(page) >= 3 or password_page(page):
         return  # the form (or a sign-in) is already on the page
     apply = [b for b in page.locator("a:visible, button:visible").all() if APPLY_TEXT.match(button_text(b))]
     if not apply:
@@ -278,6 +279,7 @@ def open_application(page: Page, job_url: str) -> None:
     else:
         apply[0].click()
     page.wait_for_timeout(6000)
+    dismiss_cookies(page)
     if not (captcha_box(page) and visible_inputs(page) >= 3):
         wait_out_bot_check(page, "opening the application")  # a box inside the form waits for submit()
 
@@ -326,6 +328,19 @@ def wait_for_tick(page: Page) -> None:
     raise Blocked("The \"I'm not a robot\" box was not ticked within 30 minutes; nothing was submitted")
 
 
+COOKIE_TEXT = re.compile(r"^\s*(reject (all|optional)( cookies)?|necessary (cookies )?only|only necessary|"
+                         r"accept (only )?necessary( cookies)?|decline( all)?)\s*$", re.I)
+
+
+def dismiss_cookies(page: Page) -> None:
+    """Cookie banners cover buttons; the choice that shares the least is picked."""
+    for b in page.locator("button:visible, a[role='button']:visible").all():
+        if COOKIE_TEXT.match(button_text(b)):
+            b.click()
+            page.wait_for_timeout(1000)
+            return
+
+
 def page_job_title(page: Page) -> str:
     return _job_title["text"]
 
@@ -355,7 +370,9 @@ def submit_button(page: Page):
 
 
 def is_review(page: Page) -> bool:
-    return submit_button(page) is not None and next_button(page) is None
+    """The final page: a Submit-like button, no Next, and an actual form. (A job description
+    page has an Apply button too, but no fields.)"""
+    return submit_button(page) is not None and next_button(page) is None and visible_inputs(page) >= 2
 
 
 def next_page(page: Page) -> str:

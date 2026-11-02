@@ -329,7 +329,7 @@ def wait_for_tick(page: Page) -> None:
 
 
 COOKIE_TEXT = re.compile(r"^\s*(reject (all|optional)( cookies)?|necessary (cookies )?only|only necessary|"
-                         r"accept (only )?necessary( cookies)?|decline( all)?)\s*$", re.I)
+                         r"accept (only )?necessary( cookies)?|decline( all)?)\b", re.I)
 
 
 def dismiss_cookies(page: Page) -> None:

@@ -229,5 +229,10 @@ with something Ali can run and see working.
   Ali for approvals and questions.
 
 ## Phase 9: Polish for the portfolio
+- ✅ Privacy pass (2026-11-02): history rewritten with git-filter-repo to remove the phone,
+  email, and legal surname; commits now use the GitHub noreply address; the email signature
+  and legal name come from the private answer bank; the example answer bank is generic.
+- ✅ README for the portfolio (what it does, results, diagram, drivers, safety rules).
+- Still to do: a demo GIF or screenshots, then make the repo public (Ali's call).
 - README with a short demo GIF, architecture diagram, and the accuracy numbers from
   Phase 4. Double check git history has no personal data, then make the repo public.

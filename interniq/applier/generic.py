@@ -33,7 +33,7 @@ SIGN_IN_WAIT_MS = 20 * 60 * 1000
 _job_title = {"text": ""}
 
 field, describe = ef.field, ef.describe
-fill_text, select_option, select_search = ef.fill_text, ef.select_option, ef.select_search
+fill_text = ef.fill_text
 set_checkbox, set_date = ef.set_checkbox, ef.set_date
 
 # Fields whose label the Eightfold reader couldn't find (no <label for>, no aria) get the
@@ -57,6 +57,72 @@ LABEL_JS = r"""
   return out;
 }
 """
+
+# Fixes for what the Eightfold reader gets wrong on other sites: radios whose <label> wraps
+# the input (options and value from the label text), and "menu selects" (BambooHR): a hidden,
+# empty <select> next to a visible toggle button that opens a menu of options.
+FIX_JS = r"""
+() => {
+  const text = e => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
+  const radioLabel = r => text((r.id && document.querySelector(`label[for="${CSS.escape(r.id)}"]`)) || r.closest('label')) || r.value;
+  const out = {};
+  for (const el of document.querySelectorAll('[data-iiq]')) {
+    const id = el.dataset.iiq;
+    if (el.type === 'radio') {
+      const group = [...document.querySelectorAll(`input[type="radio"][name="${CSS.escape(el.name)}"]`)];
+      const on = group.find(r => r.checked);
+      out[id] = {options: group.map(radioLabel), value: on ? radioLabel(on) : ''};
+    } else if (el.tagName === 'SELECT' && !el.offsetWidth) {
+      let box = el.parentElement, toggle = null;
+      for (let i = 0; i < 4 && box && !toggle; i++, box = box.parentElement)
+        toggle = [...box.querySelectorAll('button[aria-haspopup]')].find(b => b.offsetWidth);
+      if (!toggle) continue;
+      toggle.dataset.iiqToggle = id;
+      const shown = text(toggle);
+      out[id] = {menu: true, value: /^[-–—\s]*select[-–—\s]*$/i.test(shown) ? '' : shown};
+    }
+  }
+  return out;
+}
+"""
+
+
+def menu_options(page: Page, field_id: str, close: bool = True) -> list:
+    toggle = page.locator(f'[data-iiq-toggle="{field_id}"]')
+    toggle.scroll_into_view_if_needed()
+    toggle.click()
+    page.wait_for_timeout(1000)
+    items = [o for o in page.locator('[role="menuitem"], [role="option"]').all() if o.is_visible()]
+    if close:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+    return items
+
+
+def select_option(page: Page, field_id: str, value: str) -> str:
+    if not page.locator(f'[data-iiq-toggle="{field_id}"]').count():
+        return ef.select_option(page, field_id, value)
+    shown = page.evaluate(FIX_JS).get(field_id, {}).get("value", "")
+    if shown and best_option([shown], value) == shown:
+        # Re-picking a country resets the province list, so a set value is left alone.
+        return f"ok (already {shown!r}; left alone)"
+    items = menu_options(page, field_id, close=False)
+    names = [re.sub(r"\s+", " ", o.inner_text()).strip() for o in items]
+    choice = best_option(names, value)
+    if not choice:
+        page.keyboard.press("Escape")
+        return f"no option matches {value!r}; options are: {names[:60]}"
+    items[names.index(choice)].click()
+    page.wait_for_timeout(800)
+    got = page.evaluate(FIX_JS).get(field_id, {}).get("value", "")
+    return f"ok (selected {choice!r})" if got == choice else f"selection didn't stick (shows {got!r})"
+
+
+def select_search(page: Page, field_id: str, value: str) -> str:
+    if page.locator(f'[data-iiq-toggle="{field_id}"]').count():
+        return select_option(page, field_id, value)
+    return ef.select_search(page, field_id, value)
+
 
 # Buttons that add a repeating entry ("Add another", "+ Add education").
 ADD_JS = r"""
@@ -93,7 +159,14 @@ def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
     fields = page.evaluate(ef.READ_FIELDS_JS)
     guesses = page.evaluate(LABEL_JS)
+    fixes = page.evaluate(FIX_JS)
     for f in fields:
+        fix = fixes.get(f["id"], {})
+        if fix.get("menu"):
+            f["value"] = fix["value"]
+            f["options"] = [re.sub(r"\s+", " ", o.inner_text()).strip() for o in menu_options(page, f["id"])][:60]
+        elif "options" in fix:
+            f["options"], f["value"] = fix["options"], fix["value"]
         if f["kind"] == "select" and "options" not in f:
             f["options"] = ef.combobox_options(page, f["id"])[:60]
         f.pop("list", None)
@@ -177,7 +250,52 @@ def open_application(page: Page, job_url: str) -> None:
     else:
         apply[0].click()
     page.wait_for_timeout(6000)
-    wait_out_bot_check(page, "opening the application")
+    if not (captcha_box(page) and visible_inputs(page) >= 3):
+        wait_out_bot_check(page, "opening the application")  # a box inside the form waits for submit()
+
+
+# ---------- "I'm not a robot" box inside the form ----------
+# Some forms (BambooHR) put a reCAPTCHA checkbox next to Submit. Ali ticks it himself, and
+# a tick expires after about two minutes, so it's only asked for when he taps Submit.
+
+def captcha_box(page: Page):
+    for frame in page.frames:
+        if "recaptcha/api2/anchor" in frame.url or ("hcaptcha" in frame.url and "checkbox" in frame.url):
+            element = frame.frame_element()
+            if element.is_visible():
+                return frame
+    return None
+
+
+def captcha_ticked(page: Page) -> bool:
+    frame = captcha_box(page)
+    if frame is None:
+        return True
+    box = frame.locator("#recaptcha-anchor, #checkbox").first
+    return box.count() > 0 and box.get_attribute("aria-checked") == "true"
+
+
+def card_notes(page: Page) -> list[str]:
+    if captcha_box(page) is None:
+        return []
+    return ["**🤖 This form has an \"I'm not a robot\" box next to Submit.** Tick it in the InternIQ window, "
+            "then tap ✅ Submit within 2 minutes (a tick expires). If it isn't ticked when you tap, I'll ping you "
+            "and press Submit as soon as you tick it."]
+
+
+def wait_for_tick(page: Page) -> None:
+    if captcha_ticked(page):
+        return
+    discord_bot.call(discord_bot.send(
+        "DISCORD_QUESTIONS_CHANNEL_ID",
+        "🤖 Approved. Now tick \"I'm not a robot\" at the bottom of the form in the InternIQ window; "
+        "I press Submit right after."))
+    for _ in range(180):  # up to 30 minutes
+        page.wait_for_timeout(2000)
+        if captcha_ticked(page):
+            page.wait_for_timeout(1000)
+            return
+    raise Blocked("The \"I'm not a robot\" box was not ticked within 30 minutes; nothing was submitted")
 
 
 def page_job_title(page: Page) -> str:
@@ -245,9 +363,11 @@ def submit(page: Page, posting_id: int) -> bool:
     app = db.get_application(db.connect(), posting_id)
     if not app or app["state"] != "approved":
         raise PermissionError(f"Application {posting_id} is not approved; refusing to submit")
-    button = submit_button(page)
-    if button is None:
+    if submit_button(page) is None:
         raise Blocked("The Submit button is gone (session may have timed out)")
+    wait_for_tick(page)
+    button = submit_button(page)
+    button.scroll_into_view_if_needed()
     button.click()
     page.wait_for_timeout(8000)
     wait_out_bot_check(page, "submitting")

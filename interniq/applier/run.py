@@ -216,6 +216,8 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
         fill_until_review(page, filler, driver)
+        if hasattr(driver, "card_notes"):
+            filler.unsure[:0] = driver.card_notes(page)
         if hasattr(driver, "after_submit_page"):
             filler.unsure.append("Submit presses this page's button once. If the site shows another page "
                                  "instead of a confirmation, you'll get an Approval 2 card for it first.")

@@ -556,7 +556,29 @@ def register(page: Page, button) -> None:
             raise Blocked(f"The Register button on {host(page)} disappeared")
 
 
+POPUP_NEXT_TEXT = re.compile(r"^\s*(verify|confirm|submit code|verify code|next|continue|ok)\s*$", re.I)
+
+
+def popup_button(page: Page):
+    """An open popup with fields (an emailed code box) is answered with its own button,
+    never with the page's buttons behind it."""
+    for popup in page.locator(POPUPS).all():
+        try:
+            if not popup.locator("input:visible").count():
+                continue
+            found = [b for b in popup.locator("button:visible, [role='button']:visible").all()
+                     if POPUP_NEXT_TEXT.match(button_text(b))]
+        except Exception:
+            continue
+        if found:
+            return found[0]
+    return None
+
+
 def next_button(page: Page):
+    in_popup = popup_button(page)
+    if in_popup is not None:
+        return in_popup
     pattern = REGISTER_TEXT if register_form(page) else NEXT_TEXT
     found = [b for b in buttons(page) if pattern.match(button_text(b)) or NEXT_TEXT.match(button_text(b))]
     return found[-1] if found else None

@@ -215,7 +215,7 @@ with something Ali can run and see working.
 
 ## Phase 8: Daily automation
 - ✅ `python -m interniq daily` (`scripts/daily.cmd`, Task Scheduler "InternIQ Daily Check",
-  9:00 AM, interactive logon so the Elevate Chrome can open): slow crawl (max 15 new, 6 to
+  10:00 PM (Ali is usually home then), interactive logon so the Elevate Chrome can open): slow crawl (max 15 new, 6 to
   12 s apart, stops on a block), screening, and one #log summary, "0 new postings today"
   included. First run 2026-11-01: 34 listed, 0 new.
 - Still to do: bot autostart with Windows, `!run` and `!pause` commands, crash recovery

@@ -214,7 +214,11 @@ with something Ali can run and see working.
   handed to Ali.
 
 ## Phase 8: Daily automation
-- Task Scheduler job (daily 9 PM, wake from sleep), `!run` and `!pause` commands, crash recovery
+- ✅ `python -m interniq daily` (`scripts/daily.cmd`, Task Scheduler "InternIQ Daily Check",
+  9:00 AM, interactive logon so the Elevate Chrome can open): slow crawl (max 15 new, 6 to
+  12 s apart, stops on a block), screening, and one #log summary, "0 new postings today"
+  included. First run 2026-11-01: 34 listed, 0 new.
+- Still to do: bot autostart with Windows, `!run` and `!pause` commands, crash recovery
   (resume from saved status), log cleanup.
 - **Done when:** a full unattended night run processes new postings and only pings
   Ali for approvals and questions.

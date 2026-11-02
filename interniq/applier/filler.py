@@ -41,11 +41,14 @@ sources and ask them all in ONE ask_ali call, numbered, each with its options, e
 ("1 basic, 2 none"). Then fill everything. Only ask again if his reply is unclear.
 Follow RULES.md section 5 (form answers) and section 2 (term choice: use form_term).
 
+Consents (Ali's standing decision): "I agree" / "I accept" to terms of use, privacy
+policies, data processing, e-signature consent, and similar consent boxes are accepted
+without asking him; call record_legal for each so the card lists it. Never tick marketing,
+newsletter, or SMS opt-ins.
 Legal and attestation questions (citizenship, work authorization, export control,
 Controlled Goods, background check consent, criminal record, security clearance,
-"I certify", "I agree", terms of use): fill them from the answer bank if it has the
-answer, otherwise ask Ali, and ALWAYS call record_legal for each one so Ali confirms it on
-the approval card. Voluntary self-identification questions (gender, ethnicity,
+"I certify this is true"): fill them from the answer bank if it has the answer, otherwise
+ask Ali, and ALWAYS call record_legal for each one so Ali confirms it on the approval card. Voluntary self-identification questions (gender, ethnicity,
 disability, veteran status): use the answer bank, or ask Ali once.
 
 How to work:

@@ -178,6 +178,7 @@ def step_name(page: Page) -> str:
 
 def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
+    accept_consent(page)
     fields = page.evaluate(ef.READ_FIELDS_JS)
     guesses = page.evaluate(LABEL_JS)
     fixes = page.evaluate(FIX_JS)
@@ -264,6 +265,7 @@ def password_page(page: Page) -> bool:
 
 def open_application(page: Page, job_url: str) -> None:
     _job_url["url"] = job_url
+    _consented.clear()
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")
@@ -281,6 +283,7 @@ def open_application(page: Page, job_url: str) -> None:
         apply[0].click()
     page.wait_for_timeout(6000)
     dismiss_cookies(page)
+    accept_consent(page)
     if not (captcha_box(page) and visible_inputs(page) >= 3):
         wait_out_bot_check(page, "opening the application")  # a box inside the form waits for submit()
 
@@ -307,9 +310,10 @@ def captcha_ticked(page: Page) -> bool:
 
 
 def card_notes(page: Page) -> list[str]:
+    notes = [f"**Consent accepted automatically:** {c}" for c in _consented]
     if captcha_box(page) is None:
-        return []
-    return ["**🤖 This form has an \"I'm not a robot\" box next to Submit.** Tick it in the InternIQ window, "
+        return notes
+    return notes + ["**🤖 This form has an \"I'm not a robot\" box next to Submit.** Tick it in the InternIQ window, "
             "then tap ✅ Submit within 2 minutes (a tick expires). If it isn't ticked when you tap, I'll ping you "
             "and press Submit as soon as you tick it."]
 
@@ -356,6 +360,30 @@ def job_heading(page: Page) -> str:
             return specific[0]
         page.wait_for_timeout(1000)
     return ""
+
+
+# Privacy / terms popups that block the application are accepted (Ali's standing decision,
+# 2026-11-02) and listed on the approval card. Marketing opt-ins are never accepted.
+CONSENT_DIALOG = re.compile(r"privacy|consent|terms|personal information|data protection", re.I)
+CONSENT_BUTTON = re.compile(r"^\s*(consent( (&|and) continue)?|i agree|agree( (&|and) continue)?|i accept|"
+                            r"accept( (&|and) continue)?|acknowledge|ok,? i understand)\s*$", re.I)
+_consented: list[str] = []
+
+
+def accept_consent(page: Page) -> None:
+    for dialog in page.locator('[role="dialog"]:visible, [aria-modal="true"]:visible, .modal:visible').all():
+        text = re.sub(r"\s+", " ", dialog.inner_text())
+        if not CONSENT_DIALOG.search(text) or re.search(r"marketing|newsletter|sms|text message", text, re.I):
+            continue
+        button = next((b for b in dialog.locator("button:visible, a[role='button']:visible").all()
+                       if CONSENT_BUTTON.match(button_text(b))), None)
+        if button is None:
+            continue
+        title = text[:90]
+        button.click()
+        page.wait_for_timeout(2000)
+        _consented.append(f"{button_text(button) or 'Accepted'} on: {title}")
+        print(f"  accepted a consent popup ({title[:60]})")
 
 
 def page_job_title(page: Page) -> str:

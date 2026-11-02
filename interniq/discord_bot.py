@@ -433,9 +433,33 @@ def learning_command(*args) -> str:
     return f"Learning mode is **{state}**: {meaning}."
 
 
+def pause_command(*_) -> str:
+    db.set_setting(db.connect(), "paused", "1")
+    return "⏸️ **Paused.** The 10 PM daily check skips until you type `!resume`."
+
+
+def resume_command(*_) -> str:
+    db.set_setting(db.connect(), "paused", "")
+    return "▶️ **Resumed.** The daily check runs again at 10 PM (`!run` starts one now)."
+
+
+def run_command(*_) -> str:
+    """Start the daily check now, in its own process (the bot stays responsive)."""
+    import subprocess
+
+    if db.get_setting(db.connect(), "paused", ""):
+        return "⏸️ Paused right now; type `!resume` first."
+    script = config.ROOT / "scripts" / "daily.cmd"
+    subprocess.Popen(["cmd", "/c", str(script)], cwd=str(config.ROOT), creationflags=subprocess.CREATE_NO_WINDOW)
+    return "🔎 Daily check started; the summary lands in #log in a few minutes."
+
+
 COMMANDS = {
     "!status": status_message,
     "!learning": learning_command,
+    "!pause": pause_command,
+    "!resume": resume_command,
+    "!run": run_command,
 }
 
 

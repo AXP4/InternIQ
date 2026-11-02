@@ -46,12 +46,22 @@ def crawl() -> None:
 def daily() -> None:
     """The once-a-day check: a slow crawl, screening of anything new, and one summary in
     #log ("0 new postings today" included)."""
-    from datetime import date
+    from datetime import date, datetime, timedelta
 
     from interniq import browser, db, screener, sites
     from interniq.elevate import crawler
 
     today = date.today().strftime("%b %d").replace(" 0", " ")
+    if db.get_setting(db.connect(), "paused", ""):
+        print("paused; skipping")
+        asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", f"⏸️ Daily check, {today}: paused (type `!resume`)."))
+        return
+    conn = db.connect()
+    started = db.get_setting(conn, "daily_running", "")
+    if started and datetime.now() - datetime.fromisoformat(started) < timedelta(hours=1):
+        print("another daily check is running; not starting a second one")
+        return  # never two Elevate sessions at once
+    db.set_setting(conn, "daily_running", datetime.now().isoformat(timespec="seconds"))
     try:
         with browser.open_browser(elevate=True) as context:
             counts = crawler.crawl(context)
@@ -59,6 +69,8 @@ def daily() -> None:
     except crawler.ElevateBlocked as e:
         asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", f"📋 Daily check, {today}: stopped, {e}"))
         raise SystemExit(1)
+    finally:
+        db.set_setting(conn, "daily_running", "")  # the Elevate session is closed
     results = screener.screen_new() if counts["new"] else []
     if not results:
         message = f"📋 Daily check, {today}: **0 new postings today** ({counts['listed']} ENSF postings listed)."

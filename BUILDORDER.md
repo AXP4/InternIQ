@@ -218,7 +218,10 @@ with something Ali can run and see working.
   10:00 PM (Ali is usually home then), interactive logon so the Elevate Chrome can open): slow crawl (max 15 new, 6 to
   12 s apart, stops on a block), screening, and one #log summary, "0 new postings today"
   included. First run 2026-11-01: 34 listed, 0 new.
-- Still to do: bot autostart with Windows, `!run` and `!pause` commands, crash recovery
+- ✅ Bot autostart: Task Scheduler "InternIQ Discord Bot" starts `pythonw -m interniq bot` at
+  logon and restarts it within a minute if it stops. The daily check wakes the PC from sleep.
+  `scripts/setup_tasks.ps1` creates both jobs.
+- Still to do: `!run` and `!pause` commands, crash recovery
   (resume from saved status), log cleanup.
 - **Done when:** a full unattended night run processes new postings and only pings
   Ali for approvals and questions.

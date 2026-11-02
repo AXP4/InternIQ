@@ -267,8 +267,7 @@ def open_application(page: Page, job_url: str) -> None:
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")
-    heads = page.locator("h1:visible").all_inner_texts()
-    _job_title["text"] = heads[0].strip() if heads else page.title().split(" | ")[0].split(" - ")[0].strip()
+    _job_title["text"] = job_heading(page) or page.title().split(" | ")[0].split(" - ")[0].strip()
     dismiss_cookies(page)
     if visible_inputs(page) >= 3 or password_page(page):
         return  # the form (or a sign-in) is already on the page
@@ -341,6 +340,22 @@ def dismiss_cookies(page: Page) -> None:
             b.click()
             page.wait_for_timeout(1000)
             return
+
+
+GENERIC_HEADING = re.compile(r"^(careers?|career cent(re|er)|jobs?|job search|search jobs|current openings|"
+                             r"join (us|our team)|opportunities)$", re.I)
+
+
+def job_heading(page: Page) -> str:
+    """The job's own heading. Some sites (ADP) show a generic "Career Centre" heading while
+    the job loads, so wait up to 15 s for a specific one."""
+    for _ in range(15):
+        heads = [h.strip() for h in page.locator("h1:visible, h2:visible").all_inner_texts() if h.strip()]
+        specific = [h for h in heads if not GENERIC_HEADING.match(h)]
+        if specific:
+            return specific[0]
+        page.wait_for_timeout(1000)
+    return ""
 
 
 def page_job_title(page: Page) -> str:

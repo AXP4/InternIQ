@@ -179,6 +179,7 @@ def step_name(page: Page) -> str:
 def read_page(page: Page) -> dict:
     page.wait_for_timeout(1500)
     accept_consent(page)
+    send_code_to_email(page)
     fields = page.evaluate(ef.READ_FIELDS_JS)
     guesses = page.evaluate(LABEL_JS)
     fixes = page.evaluate(FIX_JS)
@@ -371,9 +372,7 @@ _consented: list[str] = []
 
 
 def accept_consent(page: Page) -> None:
-    popups = ('[role="dialog"]:visible, [aria-modal="true"]:visible, .modal:visible, sdf-focus-pane:visible, '
-              '[class*="dialog" i]:visible, [class*="modal" i]:visible')
-    for dialog in page.locator(popups).all():
+    for dialog in page.locator(POPUPS).all():
         text = re.sub(r"\s+", " ", dialog.inner_text())
         if not CONSENT_DIALOG.search(text) or re.search(r"marketing|newsletter|sms|text message", text, re.I):
             continue
@@ -390,6 +389,34 @@ def accept_consent(page: Page) -> None:
         _consented.append(f"Accepted on: {title}")
         print(f"  accepted a consent popup ({title[:60]})")
         return  # the popup (and its nested parts) are gone now
+
+
+POPUPS = ('[role="dialog"]:visible, [aria-modal="true"]:visible, .modal:visible, sdf-focus-pane:visible, '
+          '[class*="dialog" i]:visible, [class*="modal" i]:visible')
+SEND_TEXT = re.compile(r"^\s*(send( code)?|send verification code|next|continue)\s*$", re.I)
+
+
+def send_code_to_email(page: Page) -> None:
+    """"Where should we send your verification code?" popups: pick Ali's email (the agent
+    reads codes from his Outlook), never his phone, and press Send."""
+    email = config.require("APPLY_EMAIL")
+    for popup in page.locator(POPUPS).all():
+        try:
+            text = popup.inner_text()
+        except Exception:
+            continue
+        if not re.search(r"verification code|security code|one[- ]time", text, re.I) or email not in text:
+            continue
+        popup.get_by_text(email, exact=False).first.click()
+        page.wait_for_timeout(800)
+        send = next((b for b in popup.locator("button:visible, [role='button']:visible").all()
+                     if SEND_TEXT.match(button_text(b))), None)
+        if send is None:
+            raise Blocked("The verification code popup has no Send button")
+        send.click()
+        page.wait_for_timeout(5000)
+        print("  verification code: chose the email address and pressed Send")
+        return
 
 
 def page_job_title(page: Page) -> str:
@@ -562,6 +589,7 @@ def next_page(page: Page) -> str:
         button.click()
         page.wait_for_timeout(5000)
         wait_out_bot_check(page, "moving to the next page")
+    send_code_to_email(page)
     ensure_signed_in(page)
     after = step_name(page)
     changed = [f["label"] for f in page.evaluate(ef.READ_FIELDS_JS)] != before

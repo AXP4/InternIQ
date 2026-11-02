@@ -38,7 +38,7 @@ _job_title = {"text": ""}
 
 field, describe = ef.field, ef.describe
 fill_text = ef.fill_text
-set_checkbox, set_date = ef.set_checkbox, ef.set_date
+set_date = ef.set_date
 
 # Fields whose label the Eightfold reader couldn't find (no <label for>, no aria) get the
 # question text around them: a wrapping <label>, or the nearest short text block above.
@@ -291,6 +291,26 @@ def choose_radio_by_text(page: Page, question: str, value: str) -> str:
 
 
 _held: dict[str, list[str]] = {}  # field id -> paths uploaded into it this run
+
+
+def set_checkbox(page: Page, field_id: str, checked: bool, option: str | None = None) -> str:
+    """Styled checkboxes hide the real input (outside the viewport or zero size): click its
+    label, or the visible text next to it, instead."""
+    try:
+        return ef.set_checkbox(page, field_id, checked, option)
+    except Exception:
+        pass
+    box = field(page, field_id)
+    if box.is_checked() == checked:
+        return "ok"
+    target = box.evaluate_handle("""e => (e.id && document.querySelector(`label[for="${CSS.escape(e.id)}"]`))
+        || e.closest('label') || e.parentElement""").as_element()
+    if target is None:
+        return "couldn't reach the checkbox or its label"
+    target.scroll_into_view_if_needed()
+    target.click()
+    page.wait_for_timeout(600)
+    return "ok" if box.is_checked() == checked else "clicked its label but the box didn't change"
 
 
 def upload(page: Page, field_id: str, path: str) -> str:

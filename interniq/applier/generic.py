@@ -12,12 +12,14 @@ touched: Ali is pinged.
 """
 
 import re
+from pathlib import Path
 
 from playwright.sync_api import Page
 
 from interniq import config, db, discord_bot, outlook
 from interniq.applier import eightfold as ef
 from interniq.applier.workday import Blocked, best_option, password_slots, wait_out_bot_check
+from interniq.elevate.apply import merge
 
 SITE = "generic"
 SHOWS_FILES_ON_REVIEW = True
@@ -210,9 +212,10 @@ def read_page(page: Page) -> dict:
             f["value"] = ", ".join(field(page, f["id"]).evaluate("e => [...e.files].map(x => x.name)"))
     if password_page(page):
         fields = [f for f in fields if "password" not in f["label"].lower()]
+    errors = sorted(set(page.evaluate(ef.ERRORS_JS)))[:15]
+    fields += hidden_questions(page, errors, fields)
     _labels.update({f["id"]: f["label"] for f in fields})
-    return {"step": step_name(page), "fields": fields, "add_buttons": page.evaluate(ADD_JS),
-            "errors": sorted(set(page.evaluate(ef.ERRORS_JS)))[:15]}
+    return {"step": step_name(page), "fields": fields, "add_buttons": page.evaluate(ADD_JS), "errors": errors}
 
 
 _labels: dict[str, str] = {}  # field id -> question, from the last read_page
@@ -222,7 +225,7 @@ def choose_radio(page: Page, field_id: str, value: str) -> str:
     """Radio labels may be <label for>, a wrapping <label>, or the value attribute. Sites
     that redraw their radios (ADP) lose the field's tag, so the choice is then found by
     the question text and the answer text."""
-    if not field(page, field_id).count():
+    if field_id.startswith("q") or not field(page, field_id).count():
         return choose_radio_by_text(page, _labels.get(field_id, ""), value)
     name = field(page, field_id).get_attribute("name")
     group = page.locator(f'input[type="radio"][name="{name}"]').all()
@@ -236,6 +239,30 @@ def choose_radio(page: Page, field_id: str, value: str) -> str:
     radio = group[labels.index(choice)]
     radio.check(force=True)
     return "ok" if radio.is_checked() else f"clicked {choice!r} but it isn't selected"
+
+
+def hidden_questions(page: Page, errors: list[str], fields: list[dict]) -> list[dict]:
+    """Questions the site says are unanswered but that no field matches: their choices live
+    inside custom components (ADP). Found by the question text and the radios right below
+    it; answered with choose_radio (which then clicks by text)."""
+    known = " ".join(f["label"] for f in fields).lower()
+    extra = []
+    for n, question in enumerate(e for e in errors if e.strip().endswith("?")):
+        if question[:40].lower() in known:
+            continue
+        anchor = page.get_by_text(question[:80], exact=False).first
+        if not anchor.count() or not anchor.bounding_box():
+            continue
+        top = anchor.bounding_box()["y"]
+        names = []
+        for radio in page.get_by_role("radio").all():
+            box = radio.bounding_box()
+            if box and top < box["y"] < top + 160:
+                names.append(re.sub(r"\s+", " ", radio.get_attribute("aria-label") or radio.inner_text() or "").strip())
+        if names:
+            extra.append({"id": f"q{n + 1}", "kind": "radio", "label": question, "required": True,
+                          "options": [x for x in names if x], "value": ""})
+    return extra
 
 
 def choose_radio_by_text(page: Page, question: str, value: str) -> str:
@@ -263,19 +290,35 @@ def choose_radio_by_text(page: Page, question: str, value: str) -> str:
     return f"ok (picked {value!r})" if checked else f"clicked {value!r} under the question; it doesn't read as selected"
 
 
+_held: dict[str, list[str]] = {}  # field id -> paths uploaded into it this run
+
+
 def upload(page: Page, field_id: str, path: str) -> str:
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
     box = field(page, field_id)
     held = box.evaluate("e => [...e.files].map(x => x.name)")
+    merged_note = ""
     if held and not box.get_attribute("multiple"):
-        return f"that box already holds {held}; not replacing it with {name}"
+        earlier = _held.get(field_id, [])
+        if not earlier or "resume" in " ".join(earlier + [path]).lower():
+            return f"that box already holds {held}; not replacing it with {name}"
+        # One box for "other documents": join the extra documents into one PDF (the resume
+        # always keeps its own box).
+        merged = Path(earlier[0]).with_name("Ali_Alanizi_Cover_Letter_and_Transcript.pdf")
+        merge(earlier + [path], merged)
+        _held[field_id] = earlier + [path]
+        path, name = str(merged), merged.name
+        merged_note = (f" The box takes one file, so {', '.join(Path(x).name for x in _held[field_id])} were joined "
+                       f"into {name}: call record_unsure so the card says so.")
+    else:
+        _held[field_id] = [path]
     box.set_input_files(path)
     for _ in range(10):
         page.wait_for_timeout(1500)
         if name.rsplit(".", 1)[0] in page.locator("body").inner_text() or \
                 name in (field(page, field_id).evaluate("e => [...e.files].map(x => x.name)") if field(page, field_id).count() else []):
             return (f"ok ({name} uploaded). Some sites parse a resume and re-fill fields: "
-                    "call read_page and check them.")
+                    "call read_page and check them." + merged_note)
     return "upload didn't show up on the page; do NOT upload again, call record_unsure instead"
 
 
@@ -302,6 +345,7 @@ def password_page(page: Page) -> bool:
 def open_application(page: Page, job_url: str) -> None:
     _job_url["url"] = job_url
     _consented.clear()
+    _held.clear()
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")

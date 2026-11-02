@@ -43,6 +43,39 @@ def crawl() -> None:
     asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
 
 
+def daily() -> None:
+    """The once-a-day check: a slow crawl, screening of anything new, and one summary in
+    #log ("0 new postings today" included)."""
+    from datetime import date
+
+    from interniq import browser, db, screener, sites
+    from interniq.elevate import crawler
+
+    today = date.today().strftime("%b %d").replace(" 0", " ")
+    try:
+        with browser.open_browser(elevate=True) as context:
+            counts = crawler.crawl(context)
+            sites.check_links(context, db.connect())
+    except crawler.ElevateBlocked as e:
+        asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", f"📋 Daily check, {today}: stopped, {e}"))
+        raise SystemExit(1)
+    results = screener.screen_new() if counts["new"] else []
+    if not results:
+        message = f"📋 Daily check, {today}: **0 new postings today** ({counts['listed']} ENSF postings listed)."
+    else:
+        lines = [f"📋 Daily check, {today}: **{len(results)} new posting{'s' if len(results) != 1 else ''} today**"]
+        for r in results:
+            p = r["posting"]
+            due = (p.get("deadline") or "")[:10]
+            lines.append(f"• `{p['id']}` **{p['org']}**, {p['title'][:70]}" + (f" (due {due})" if due else "")
+                         + f": {r['decision']}")
+        message = "\n".join(lines)
+    if counts.get("waiting"):
+        message += f"\n{counts['waiting']} more are waiting; they come in tomorrow (max {crawler.MAX_NEW_PER_RUN} a day)."
+    print(message)
+    asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
+
+
 def write(*posting_ids: str) -> None:
     """Build resume + cover letter (+ transcript) for each posting ID."""
     from interniq.writer import package
@@ -210,6 +243,7 @@ COMMANDS = {
     "ping": ping,
     "login": login,
     "crawl": crawl,
+    "daily": daily,
     "inbox": inbox,
     "screen": screen,
     "decide": decide,

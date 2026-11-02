@@ -204,6 +204,7 @@ def crawl(context: BrowserContext) -> dict:
     known = db.known_ids(conn)
 
     new = 0
+    unseen = sum(1 for row in rows if row["id"] not in known)
     for row in rows:
         if row["id"] in known:
             db.touch(conn, row["id"], row["elevate_status"])
@@ -217,4 +218,4 @@ def crawl(context: BrowserContext) -> dict:
         db.save_posting(conn, posting)
         new += 1
         print(f"  saved {row['id']}  {posting['org']}: {posting['title'][:60]}")
-    return {"listed": len(rows), "new": new}
+    return {"listed": len(rows), "new": new, "waiting": unseen - new}

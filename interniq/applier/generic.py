@@ -43,14 +43,18 @@ LABEL_JS = r"""
   const text = e => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
   const out = {};
   for (const el of document.querySelectorAll('[data-iiq]')) {
-    const wrap = el.closest('label');
-    let t = text(wrap);
-    if (!t) {
-      let box = el.parentElement;
-      for (let i = 0; i < 5 && box; i++, box = box.parentElement) {
-        const own = text(box);
-        if (own && own.length < 400 && own !== (el.value || '').trim()) { t = own; break; }
-      }
+    let t = '';
+    if (el.type === 'radio') {
+      const group = el.closest('[role="radiogroup"], fieldset');
+      t = (group && (group.getAttribute('aria-label') || text(group.querySelector('legend')))) || '';
+    }
+    if (!t && el.type !== 'radio') {
+      // The widest ancestor that holds only this field: its <label>/<legend> is the question.
+      let box = el.parentElement, own = null;
+      for (let i = 0; i < 6 && box && box.querySelectorAll('[data-iiq]').length <= 1; i++, box = box.parentElement) own = box;
+      const tag = own && [...own.querySelectorAll('label, legend')].find(l => text(l) && !l.contains(el) && !/^(browse|choose file)/i.test(text(l)));
+      t = text(tag) || text(el.closest('label')) || '';
+      if (!t && own) t = text(own).slice(0, 200);
     }
     out[el.dataset.iiq] = t.slice(0, 300);
   }
@@ -119,9 +123,26 @@ def select_option(page: Page, field_id: str, value: str) -> str:
 
 
 def select_search(page: Page, field_id: str, value: str) -> str:
+    """Type-to-search boxes: type, then pick the matching suggestion (the site only counts
+    a picked suggestion, not typed text)."""
     if page.locator(f'[data-iiq-toggle="{field_id}"]').count():
         return select_option(page, field_id, value)
-    return ef.select_search(page, field_id, value)
+    box = field(page, field_id)
+    box.click()
+    box.fill("")
+    box.press_sequentially(value, delay=60)
+    page.wait_for_timeout(2000)
+    options = [o for o in page.locator('[role="option"]').all() if o.is_visible()]
+    names = [re.sub(r"\s+", " ", o.inner_text()).strip() for o in options]
+    choice = best_option(names, value) if names else None
+    if not choice:
+        page.keyboard.press("Escape")
+        return f"no suggestion matches {value!r}; suggestions were {names[:15]}"
+    options[names.index(choice)].click()
+    page.wait_for_timeout(1000)
+    got = box.input_value()
+    bad = box.get_attribute("aria-invalid") == "true"
+    return f"ok (picked {choice!r})" if got.strip() and not bad else f"picked {choice!r} but the box shows {got!r}"
 
 
 # Buttons that add a repeating entry ("Add another", "+ Add education").
@@ -169,12 +190,16 @@ def read_page(page: Page) -> dict:
             f["options"], f["value"] = fix["options"], fix["value"]
         if f["kind"] == "select" and "options" not in f:
             f["options"] = ef.combobox_options(page, f["id"])[:60]
+        if f["kind"] == "select" and not f.get("options") and not fix.get("menu"):
+            f["note"] = "type-to-search box: use select_search with the value"
         f.pop("list", None)
-        weak = not f["label"] or f["label"] == "Resume/CV" or re.fullmatch(r"[\w\[\].-]+", f["label"] or "")
+        weak = (not f["label"] or f["kind"] in ("radio", "file") or re.fullmatch(r"[\w\[\].-]+", f["label"])
+                or len(f["label"]) > 60 and any(o in f["label"] for o in (f.get("options") or [])[1:3]))
         if weak and guesses.get(f["id"]):
             f["label"] = guesses[f["id"]]
         if f["kind"] == "file":
             f["label"] = (guesses.get(f["id"]) or "File upload")[:200]
+            f["note"] = "upload only the document this box's label names"
             f["value"] = ", ".join(field(page, f["id"]).evaluate("e => [...e.files].map(x => x.name)"))
     if password_page(page):
         fields = [f for f in fields if "password" not in f["label"].lower()]

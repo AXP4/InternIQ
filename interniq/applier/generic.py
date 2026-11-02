@@ -25,7 +25,7 @@ APPLY_TEXT = re.compile(r"^\s*(apply|apply now|apply online|apply for (this )?(j
 NEXT_TEXT = re.compile(r"^\s*(next|continue|save (and|&) continue|save (and|&) next|proceed|next step)\s*[>›»]?\s*$", re.I)
 SUBMIT_TEXT = re.compile(r"^\s*(submit|submit (my |your )?application|apply|send( my)? application|"
                          r"complete application|finish)\s*$", re.I)
-SUBMITTED_TEXT = ["thank you for applying", "thank you for your application", "thanks for applying",
+SUBMITTED_TEXT = ["thank you for applying", "thank you for submitting", "thank you for your application", "thanks for applying",
                   "application has been submitted", "application was submitted", "application submitted",
                   "successfully submitted", "we have received your application", "we received your application",
                   "your application has been received", "thank you for your interest"]

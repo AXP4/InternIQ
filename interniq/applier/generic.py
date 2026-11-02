@@ -300,6 +300,8 @@ def upload(page: Page, field_id: str, path: str) -> str:
     merged_note = ""
     if held and not box.get_attribute("multiple"):
         earlier = _held.get(field_id, [])
+        if not earlier and (Path(path).parent / held[0]).exists():  # a saved draft kept our earlier file
+            earlier = [str(Path(path).parent / held[0])]
         if not earlier or "resume" in " ".join(earlier + [path]).lower():
             return f"that box already holds {held}; not replacing it with {name}"
         # One box for "other documents": join the extra documents into one PDF (the resume

@@ -371,10 +371,22 @@ def register_form(page: Page) -> bool:
     return len(password_boxes(page)) >= 2  # password + confirm password
 
 
+LOGIN_LINK_TEXT = re.compile(r"^\s*(log ?in|sign ?in)\s*$", re.I)
+
+
 def ensure_signed_in(page: Page) -> None:
-    if not password_page(page) or register_form(page):
-        return  # nothing to do, or a registration form the filler fills (next_page sets the password)
+    if not password_page(page):
+        return
     remembered = db.get_setting(db.connect(), f"password_slot:{host(page)}", "")
+    if register_form(page):
+        if not remembered:
+            return  # a new account: the filler fills the form and next_page sets the password
+        # The site opened on Register, but the account exists: go to its login instead.
+        links = [b for b in page.locator("a:visible").all() + buttons(page) if LOGIN_LINK_TEXT.match(button_text(b))]
+        if not links:
+            raise Blocked(f"{host(page)} shows Register, the account exists, and there's no Login link")
+        links[0].click()
+        page.wait_for_timeout(5000)
     if remembered:
         sign_in(page, int(remembered))
         return

@@ -371,19 +371,25 @@ _consented: list[str] = []
 
 
 def accept_consent(page: Page) -> None:
-    for dialog in page.locator('[role="dialog"]:visible, [aria-modal="true"]:visible, .modal:visible').all():
+    popups = ('[role="dialog"]:visible, [aria-modal="true"]:visible, .modal:visible, sdf-focus-pane:visible, '
+              '[class*="dialog" i]:visible, [class*="modal" i]:visible')
+    for dialog in page.locator(popups).all():
         text = re.sub(r"\s+", " ", dialog.inner_text())
         if not CONSENT_DIALOG.search(text) or re.search(r"marketing|newsletter|sms|text message", text, re.I):
             continue
-        button = next((b for b in dialog.locator("button:visible, a[role='button']:visible").all()
-                       if CONSENT_BUTTON.match(button_text(b))), None)
+        try:
+            button = next((b for b in dialog.locator("button:visible, [role='button']:visible").all()
+                           if CONSENT_BUTTON.match(button_text(b))), None)
+        except Exception:  # part of a popup that just closed
+            continue
         if button is None:
             continue
         title = text[:90]
         button.click()
         page.wait_for_timeout(2000)
-        _consented.append(f"{button_text(button) or 'Accepted'} on: {title}")
+        _consented.append(f"Accepted on: {title}")
         print(f"  accepted a consent popup ({title[:60]})")
+        return  # the popup (and its nested parts) are gone now
 
 
 def page_job_title(page: Page) -> str:

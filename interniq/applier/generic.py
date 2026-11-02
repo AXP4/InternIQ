@@ -15,7 +15,7 @@ import re
 
 from playwright.sync_api import Page
 
-from interniq import config, db, discord_bot
+from interniq import config, db, discord_bot, outlook
 from interniq.applier import eightfold as ef
 from interniq.applier.workday import Blocked, best_option, password_slots, wait_out_bot_check
 
@@ -262,6 +262,7 @@ def password_page(page: Page) -> bool:
 
 
 def open_application(page: Page, job_url: str) -> None:
+    _job_url["url"] = job_url
     page.goto(job_url, wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     wait_out_bot_check(page, "opening the job page")
@@ -388,6 +389,29 @@ def ensure_signed_in(page: Page) -> None:
     print(f"  no saved account on {host(page)}: registering")
 
 
+VERIFY_TEXT = re.compile(r"verification link|verify your email|confirm your email|activate your account", re.I)
+_job_url = {"url": ""}
+
+
+def verify_email_if_asked(page: Page) -> bool:
+    """A new account that must be confirmed by email: follow the link from Ali's Outlook, then
+    go back to the job. Returns True when it did."""
+    if not VERIFY_TEXT.search(page.locator("body").inner_text()[:3000]):
+        return False
+    link = outlook.verification_link(page.context)
+    if not link:
+        raise Blocked(f"{host(page)} sent a verification email, but no matching link arrived in Outlook")
+    page.goto(link, wait_until="domcontentloaded")
+    page.wait_for_timeout(6000)
+    print(f"  email verified for {host(page)} (link from Outlook)")
+    open_application(page, _job_url["url"])
+    if password_page(page) and not register_form(page):
+        remembered = db.get_setting(db.connect(), f"password_slot:{host(page)}", "")
+        if remembered:
+            sign_in(page, int(remembered))
+    return True
+
+
 def sign_in(page: Page, slot: int) -> None:
     password = dict(password_slots()).get(slot)
     if not password:
@@ -401,6 +425,8 @@ def sign_in(page: Page, slot: int) -> None:
         raise Blocked(f"No Log in button on {host(page)}")
     button.click()
     page.wait_for_timeout(7000)
+    if verify_email_if_asked(page):
+        return
     if password_page(page):
         raise Blocked(f"Signing in to {host(page)} with password slot {slot} didn't work; stopped (no retries)")
     print(f"  signed in to {host(page)}")
@@ -428,6 +454,7 @@ def register(page: Page, button) -> None:
         if not register_form(page):
             db.set_setting(db.connect(), f"password_slot:{host(page)}", str(_register["slot"]))
             print(f"  account created on {host(page)} (slot {_register['slot']} remembered)")
+            verify_email_if_asked(page)
             return
         errors = " ".join(page.evaluate(ef.ERRORS_JS))
         if re.search(r"already (exists|registered|in use)|account with this email", errors, re.I):

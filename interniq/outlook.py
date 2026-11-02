@@ -4,6 +4,8 @@ Two jobs only:
 - latest_code: an employer site just emailed a one-time code; read it from the newest
   matching message in the inbox list (the preview line holds the code). Only messages that
   arrived in the last few minutes and look like code emails are looked at.
+- verification_link: a site Ali just registered on emailed a "verify your email" link;
+  return it from the newest matching message so the agent can open it.
 - send: an email application Ali approved with Submit on its card; compose, attach, send,
   then confirm it is in Sent Items.
 It never deletes, forwards, or replies to anything, and logs no message text.
@@ -11,6 +13,7 @@ It never deletes, forwards, or replies to anything, and logs no message text.
 
 import re
 from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 from playwright.sync_api import BrowserContext, Page
 
@@ -131,5 +134,36 @@ def sent(context: BrowserContext, subject: str) -> bool:
                 return True
             page.wait_for_timeout(5000)
         return False
+    finally:
+        page.close()
+
+
+LINK_WORDS = re.compile(r"verif|confirm|activat|validate", re.I)
+
+
+def verification_link(context: BrowserContext, max_age_minutes: int = 15, wait_seconds: int = 120) -> str | None:
+    """The link in the newest "verify your email" message from the last few minutes."""
+    page = open_mail(context)
+    try:
+        for _ in range(max(1, wait_seconds // 10)):
+            now = datetime.fromisoformat(page.evaluate(
+                "() => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); }"))
+            for item in page.locator('[role="listbox"] [role="option"]').all()[:8]:
+                label = re.sub(r"\s+", " ", item.get_attribute("aria-label") or "")
+                when = _arrived(label, now)
+                if not when or now - when > timedelta(minutes=max_age_minutes) or not LINK_WORDS.search(label):
+                    continue
+                item.click()
+                page.wait_for_timeout(3000)
+                links = page.locator('[aria-label="Message body"] a[href]').all()
+                hrefs = [(a.get_attribute("href") or "", a.inner_text()) for a in links]
+                # Outlook wraps links in safelinks; the original URL is its url= parameter.
+                for href, text in hrefs:
+                    real = re.search(r"[?&]url=([^&]+)", href)
+                    url = unquote(real[1]) if real else href
+                    if url.startswith("http") and (LINK_WORDS.search(url) or LINK_WORDS.search(text)):
+                        return url
+            page.wait_for_timeout(10_000)
+        return None
     finally:
         page.close()

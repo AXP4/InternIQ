@@ -22,8 +22,10 @@ from interniq.applier.workday import Blocked, best_option, password_slots, wait_
 SITE = "generic"
 SHOWS_FILES_ON_REVIEW = True
 APPLY_TEXT = re.compile(r"^\s*(apply|apply now|apply online|apply for (this )?(job|position|role)|"
-                        r"start (your )?application|i'?m interested)\s*$", re.I)
-NEXT_TEXT = re.compile(r"^\s*(next|continue|save (and|&) continue|save (and|&) next|proceed|next step)\s*[>›»]?\s*$", re.I)
+                        r"start (your )?application|i'?m interested|complete your application|"
+                        r"(continue|resume) (your |my )?application)\s*$", re.I)
+NEXT_TEXT = re.compile(r"^\s*(next|continue|save (and|&) continue|save (and|&) next|proceed|next step|"
+                       r"complete your application|(continue|resume) (your |my )?application)\s*[>›»]?\s*$", re.I)
 SUBMIT_TEXT = re.compile(r"^\s*(submit|submit (my |your )?application|apply|send( my)? application|"
                          r"complete application|finish)\s*$", re.I)
 SUBMITTED_TEXT = ["thank you for applying", "thank you for submitting", "thank you for your application", "thanks for applying",

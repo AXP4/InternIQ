@@ -221,8 +221,10 @@ with something Ali can run and see working.
 - ✅ Bot autostart: Task Scheduler "InternIQ Discord Bot" starts `pythonw -m interniq bot` at
   logon and restarts it within a minute if it stops. The daily check wakes the PC from sleep.
   `scripts/setup_tasks.ps1` creates both jobs.
-- Still to do: `!run` and `!pause` commands, crash recovery
-  (resume from saved status), log cleanup.
+- ✅ Discord `!pause` / `!resume` (the daily check posts "paused" and skips) and `!run` (starts one
+  now). A lock keeps two checks from ever running at once. A crash loses nothing: postings
+  are saved one by one and the next run skips what it already has.
+- Still to do: log cleanup.
 - **Done when:** a full unattended night run processes new postings and only pings
   Ali for approvals and questions.
 

@@ -254,7 +254,8 @@ def press_add(page: Page, button_id: str) -> str:
 # ---------- moving through the application ----------
 
 def visible_inputs(page: Page) -> int:
-    return page.locator("input:visible:not([type=hidden]):not([type=search]), textarea:visible, select:visible").count()
+    return page.locator("input:visible:not([type=hidden]):not([type=search]):not([type=submit]):not([type=button])"
+                        ":not([type=image]):not([type=reset]), textarea:visible, select:visible").count()
 
 
 def password_page(page: Page) -> bool:
@@ -493,7 +494,9 @@ def submit_button(page: Page):
 def is_review(page: Page) -> bool:
     """The final page: a Submit-like button, no Next, and an actual form. (A job description
     page has an Apply button too, but no fields.)"""
-    return submit_button(page) is not None and next_button(page) is None and visible_inputs(page) >= 2
+    # Sites with a Submit per section (Oleeo) land here once per section: each press gets its
+    # own approval card, and the page after it a new one (Approval 2).
+    return submit_button(page) is not None and next_button(page) is None and visible_inputs(page) >= 1
 
 
 def next_page(page: Page) -> str:

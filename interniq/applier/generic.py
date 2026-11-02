@@ -6,17 +6,18 @@ file boxes, and buttons. Labels come from <label for>, a wrapping <label>, aria
 attributes, or the nearest question text above the field. From the job page it presses
 the Apply button; Next / Continue move through the steps; the page with a Submit (or
 Apply / Send) button and no Next is the final page, which only an approved submit() presses.
-A sign-in or create-account page is Ali's: he's pinged and the agent waits for him in the
-visible window (and never touches a CAPTCHA).
+Accounts follow Ali's process: register with his email and the first password slot the site
+accepts (1, then 2, then 3), remember it, and sign in with it next time. CAPTCHAs are never
+touched: Ali is pinged.
 """
 
 import re
 
 from playwright.sync_api import Page
 
-from interniq import db, discord_bot
+from interniq import config, db, discord_bot
 from interniq.applier import eightfold as ef
-from interniq.applier.workday import Blocked, best_option, wait_out_bot_check
+from interniq.applier.workday import Blocked, best_option, password_slots, wait_out_bot_check
 
 SITE = "generic"
 SHOWS_FILES_ON_REVIEW = True
@@ -29,7 +30,6 @@ SUBMITTED_TEXT = ["thank you for applying", "thank you for submitting", "thank y
                   "application has been submitted", "application was submitted", "application submitted",
                   "successfully submitted", "we have received your application", "we received your application",
                   "your application has been received", "thank you for your interest"]
-SIGN_IN_WAIT_MS = 20 * 60 * 1000
 _job_title = {"text": ""}
 
 field, describe = ef.field, ef.describe
@@ -345,22 +345,104 @@ def page_job_title(page: Page) -> str:
     return _job_title["text"]
 
 
+# ---------- accounts (Ali's process) ----------
+# No saved account for the site: register with APPLY_EMAIL and SITE_PASSWORD_1; if the site
+# calls it too weak, slot 2, then slot 3. The slot that worked is remembered per site and is
+# the only one tried at the next sign-in. Passwords are never printed or shown to the model.
+REGISTER_TEXT = re.compile(r"^\s*(register|create (an |your )?account|sign up|new (user|candidate)|"
+                           r"create profile|join now)\b", re.I)
+SIGN_IN_TEXT = re.compile(r"^\s*(log ?in|sign ?in|continue|submit|next)\s*$", re.I)
+WEAK_TEXT = re.compile(r"password.{0,80}(must|should|at least|weak|too short|requirement|contain|invalid)|"
+                       r"(must|should).{0,40}password", re.I)
+MAX_SLOT = 3
+_register = {"slot": 0}
+
+
+def host(page: Page) -> str:
+    return page.url.split("/")[2]
+
+
+def password_boxes(page: Page) -> list:
+    return page.locator("input[type=password]:visible").all()
+
+
+def register_form(page: Page) -> bool:
+    return len(password_boxes(page)) >= 2  # password + confirm password
+
+
 def ensure_signed_in(page: Page) -> None:
-    """A login or create-account page: Ali signs in (or makes the account) himself in the
-    window; the agent waits until the password box is gone."""
-    if not password_page(page):
+    if not password_page(page) or register_form(page):
+        return  # nothing to do, or a registration form the filler fills (next_page sets the password)
+    remembered = db.get_setting(db.connect(), f"password_slot:{host(page)}", "")
+    if remembered:
+        sign_in(page, int(remembered))
         return
-    discord_bot.call(discord_bot.send(
-        "DISCORD_QUESTIONS_CHANNEL_ID",
-        f"🔑 {page.url.split('/')[2]} wants a sign-in or a new account. Please do it in the InternIQ browser "
-        "window (I don't create accounts or accept site terms for you); I'll continue once the form shows."))
-    page.wait_for_function("() => ![...document.querySelectorAll('input[type=password]')].some(e => e.offsetWidth)",
-                           timeout=SIGN_IN_WAIT_MS)
+    links = [b for b in page.locator("a:visible").all() + buttons(page) if REGISTER_TEXT.match(button_text(b))]
+    if not links:
+        raise Blocked(f"{host(page)} shows a sign-in with no saved account and no Register link")
+    links[0].click()
     page.wait_for_timeout(5000)
+    dismiss_cookies(page)
+    if not register_form(page) and password_page(page):
+        raise Blocked(f"Register on {host(page)} didn't open a form with password and confirm boxes")
+    print(f"  no saved account on {host(page)}: registering")
+
+
+def sign_in(page: Page, slot: int) -> None:
+    password = dict(password_slots()).get(slot)
+    if not password:
+        raise Blocked(f"SITE_PASSWORD_{slot} is empty")
+    user = page.locator("input[type=email]:visible, input[name*=user i]:visible, input[name*=mail i]:visible, "
+                        "input[id*=user i]:visible, input[id*=mail i]:visible, input[name*=login i]:visible").first
+    user.fill(config.require("APPLY_EMAIL"))
+    password_boxes(page)[0].fill(password)
+    button = next((b for b in buttons(page) if SIGN_IN_TEXT.match(button_text(b))), None)
+    if button is None:
+        raise Blocked(f"No Log in button on {host(page)}")
+    button.click()
+    page.wait_for_timeout(7000)
+    if password_page(page):
+        raise Blocked(f"Signing in to {host(page)} with password slot {slot} didn't work; stopped (no retries)")
+    print(f"  signed in to {host(page)}")
+
+
+def fill_new_password(page: Page) -> None:
+    slots = dict(password_slots())
+    slot = _register["slot"] + 1
+    if slot > MAX_SLOT or slot not in slots:
+        raise Blocked(f"{host(page)} refused password slots 1 to {slot - 1}; set a stronger SITE_PASSWORD")
+    _register["slot"] = slot
+    for box in password_boxes(page):
+        box.fill(slots[slot])
+    print(f"  new account password: slot {slot}")
+
+
+def register(page: Page, button) -> None:
+    """Press Register, moving to the next slot while the site calls the password too weak."""
+    _register["slot"] = 0
+    while True:
+        fill_new_password(page)
+        button.click()
+        page.wait_for_timeout(6000)
+        wait_out_bot_check(page, "creating the account")
+        if not register_form(page):
+            db.set_setting(db.connect(), f"password_slot:{host(page)}", str(_register["slot"]))
+            print(f"  account created on {host(page)} (slot {_register['slot']} remembered)")
+            return
+        errors = " ".join(page.evaluate(ef.ERRORS_JS))
+        if re.search(r"already (exists|registered|in use)|account with this email", errors, re.I):
+            raise Blocked(f"{host(page)} says an account already exists for this email; "
+                          "tell me which password slot it uses (or reset it)")
+        if not WEAK_TEXT.search(errors):
+            raise Blocked(f"Registration on {host(page)} didn't go through: {errors[:250] or 'no message'}")
+        button = next((b for b in buttons(page) if REGISTER_TEXT.match(button_text(b)) or NEXT_TEXT.match(button_text(b))), None)
+        if button is None:
+            raise Blocked(f"The Register button on {host(page)} disappeared")
 
 
 def next_button(page: Page):
-    found = [b for b in buttons(page) if NEXT_TEXT.match(button_text(b))]
+    pattern = REGISTER_TEXT if register_form(page) else NEXT_TEXT
+    found = [b for b in buttons(page) if pattern.match(button_text(b)) or NEXT_TEXT.match(button_text(b))]
     return found[-1] if found else None
 
 
@@ -383,9 +465,12 @@ def next_page(page: Page) -> str:
     if button is None:
         raise Blocked(f"No Next / Continue / Submit button on {heading!r}; this site needs a closer look")
     before = [f["label"] for f in page.evaluate(ef.READ_FIELDS_JS)]
-    button.click()
-    page.wait_for_timeout(5000)
-    wait_out_bot_check(page, "moving to the next page")
+    if register_form(page):
+        register(page, button)
+    else:
+        button.click()
+        page.wait_for_timeout(5000)
+        wait_out_bot_check(page, "moving to the next page")
     ensure_signed_in(page)
     after = step_name(page)
     changed = [f["label"] for f in page.evaluate(ef.READ_FIELDS_JS)] != before

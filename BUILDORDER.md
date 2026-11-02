@@ -176,6 +176,13 @@ with something Ali can run and see working.
 - ✅ Employer Email postings (`applier/email_apply.py`): the agent drafts the email and
   posts it as a card; Ali sends it from his Outlook and taps Submit ("I sent it"). Sent:
   Terra Sense, SeisWare, Baytex, Validere.
+- ✅ **Catch-all driver** (`applier/generic.py`), used for any site without its own driver:
+  Convverge (BambooHR), Tourmaline (company page), Morgan Stanley (Oleeo), Peters & Co.
+  (ADP). Labels from each field's container, menu selects, type-to-search boxes, popups
+  answered with their own buttons, privacy consents accepted and listed on the card,
+  accounts created with the first accepted password slot, email verification links and
+  codes read from Outlook, a robot checkbox ticked by Ali at submit time, and every
+  section Submit gets its own approval card.
 - ✅ **Outlook** (`outlook.py`): emailed codes are read from Ali's inbox (Ask on Discord only
   as a fallback), and approved email applications are sent by the agent from his Outlook
   and confirmed in Sent Items.

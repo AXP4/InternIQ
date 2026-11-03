@@ -504,6 +504,19 @@ def run() -> None:
         command = COMMANDS.get(words[0]) if words else None
         if command:
             await message.channel.send(command(*words[1:]))
+            return
+        if client.user in message.mentions:  # plain-language requests: "@InternIQ I applied to X"
+            from interniq import chat
+
+            text = message.clean_content.replace(f"@{client.user.display_name}", "").strip()
+            try:
+                answer, intents = await asyncio.to_thread(chat.reply, text, COMMANDS)
+            except Exception as e:
+                answer, intents = f"Something broke: {str(e)[:200]}", []
+            await message.channel.send(answer[:2000])
+            if intents:
+                result = await asyncio.to_thread(chat.intend_in_background, intents)
+                await message.channel.send(result[:2000])
 
     try:
         client.run(config.require("DISCORD_BOT_TOKEN"), log_handler=None)

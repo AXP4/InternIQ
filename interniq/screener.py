@@ -41,7 +41,7 @@ dates, not Elevate's term column, which always says May 2027 to August 2028. Wri
 # "legal" marks anything Ali must confirm himself on the approval card (RULES.md section 5:
 # export control, Controlled Goods, citizenship, background checks, attestations).
 Flag = Literal["borderline", "international", "clearance", "citizenship", "license", "legal",
-               "unusual_requirement", "verify_link"]
+               "unusual_requirement", "verify_link", "eligibility"]
 
 
 # "international" means outside Canada only (RULES.md). Locations that are clearly in Canada.

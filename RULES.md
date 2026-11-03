@@ -46,6 +46,10 @@ layout, PCB, silicon validation), mechanical or civil design.
 - How many roles the same company has. Apply to every role that fits, with no
   per-company limit.
 - A start date of January or May 2027. Both are fine.
+- Program enrollment. Ali is not registered in a co-op or internship program (see
+  profile_facts.md). A posting that requires being enrolled in a formal co-op or
+  internship program is still `apply`, flagged `eligibility` so the card says so and Ali
+  decides.
 - Closed roles: mark `closed` (and tell Ali) only on a 404 or a page that clearly says the
   job is closed or no longer accepting applications.
 - A redirect to a job search page is not proof the job is closed. Search the company's

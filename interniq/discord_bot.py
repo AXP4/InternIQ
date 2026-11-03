@@ -165,10 +165,19 @@ class DecideButton(discord.ui.DynamicItem[discord.ui.Button], template=r"decide:
             note = (" · writing and applying now; the final card comes to #approvals" if place == 1
                     else f" · queued (#{place}); applications run one at a time")
             await interaction.response.edit_message(
-                content=f"{interaction.message.content}\n{answer_label(self.choice)}{note}", view=None)
+                content=with_note(interaction.message.content, f"{answer_label(self.choice)}{note}"), view=None)
             return
         await interaction.response.edit_message(
-            content=f"{interaction.message.content}\n{answer_label(self.choice)}", view=None)
+            content=with_note(interaction.message.content, answer_label(self.choice)), view=None)
+
+
+def with_note(content: str, note: str, limit: int = 2000) -> str:
+    """The card's text plus a note at the end. Discord refuses messages over 2000
+    characters, so a long card is shortened to make room (the note always shows)."""
+    note = note[: limit - 20]
+    room = limit - len(note) - 2
+    body = content if len(content) <= room else content[: room - 1].rstrip() + "…"
+    return f"{body}\n{note}"
 
 
 def answer_label(choice: str) -> str:
@@ -356,7 +365,7 @@ class ApprovalButton(discord.ui.DynamicItem[discord.ui.Button],
         else:
             db.set_application_state(conn, self.posting_id, "skipped")
             result = "❌ **Skipped.** Saved as a skip for the screener too."
-        await interaction.response.edit_message(content=f"{interaction.message.content}\n{result}", view=None)
+        await interaction.response.edit_message(content=with_note(interaction.message.content, result), view=None)
 
 
 class FixModal(discord.ui.Modal, title="What should change?"):
@@ -379,13 +388,13 @@ class FixModal(discord.ui.Modal, title="What should change?"):
             # A run has this form open behind the card: the change goes to the form, not the
             # resume or letter. The run applies it and posts a new card.
             await interaction.response.edit_message(
-                content=f"{interaction.message.content}\n✏️ **Change requested on the form:** {text}\n"
-                        "Applying it to the open page; a new card follows.",
+                content=with_note(interaction.message.content, f"✏️ **Change requested on the form:** {text}\n"
+                                  "Applying it to the open page; a new card follows."),
                 view=None,
             )
             return
         await interaction.response.edit_message(
-            content=f"{interaction.message.content}\n✏️ **Fix requested:** {text}\nRewriting, a new card follows.",
+            content=with_note(interaction.message.content, f"✏️ **Fix requested:** {text}\nRewriting, a new card follows."),
             view=None,
         )
         try:

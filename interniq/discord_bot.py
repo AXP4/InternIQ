@@ -423,6 +423,22 @@ def format_counts(counts: dict) -> str:
     return ", ".join(f"{name} {n}" for name, n in counts.items()) or "none"
 
 
+def todo_line(conn) -> str:
+    """What's still open: cards waiting for Ali's tap, the apply queue, and unscreened postings."""
+    count = lambda sql: conn.execute(sql).fetchone()[0]
+    decide = count("""SELECT COUNT(*) FROM postings p JOIN decisions d ON d.posting_id = p.id
+                      WHERE p.status IN ('apply', 'ask') AND d.ali_decision IS NULL
+                      AND p.id NOT IN (SELECT posting_id FROM applications)""")
+    approve = count("SELECT COUNT(*) FROM applications WHERE state IN ('pending', 'fixing', 'approved')")
+    queued = len(json.loads(db.get_setting(conn, "apply_queue", "") or "[]"))
+    unscreened = count("SELECT COUNT(*) FROM postings WHERE status = 'new'")
+    parts = [f"{n} {what}" for n, what in ((decide, "posting cards to answer (Apply / Skip)"),
+                                          (queued, "in the apply queue"),
+                                          (approve, "applications waiting for your tap in #approvals"),
+                                          (unscreened, "not screened yet")) if n]
+    return ", ".join(parts) if parts else "nothing, you're all caught up ✅"
+
+
 def status_message(*_) -> str:
     conn = db.connect()
     s = db.status_summary(conn)
@@ -434,6 +450,7 @@ def status_message(*_) -> str:
     return "\n".join([
         "**InternIQ status**",
         f"Postings saved: {s['total']} ({s['listed']} on the latest crawl)",
+        f"**To do:** {todo_line(conn)}",
         f"Deadlines in the next 7 days: {s['due_7_days']}",
         f"Status: {format_counts(s['status'])}",
         f"Screener: {skips}",

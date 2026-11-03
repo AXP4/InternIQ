@@ -505,10 +505,16 @@ def run() -> None:
         if command:
             await message.channel.send(command(*words[1:]))
             return
-        if client.user in message.mentions:  # plain-language requests: "@InternIQ I applied to X"
+        # Plain-language requests: "@InternIQ I applied to X". Discord may insert the bot's
+        # user or its role (same name), and Ali may just type the name.
+        me = message.guild.me
+        mentioned = (client.user in message.mentions
+                     or any(role in me.roles for role in message.role_mentions)
+                     or message.content.strip().lower().startswith(("internIQ".lower(), "@internIQ".lower())))
+        if mentioned:
             from interniq import chat
 
-            text = message.clean_content.replace(f"@{client.user.display_name}", "").strip()
+            text = re.sub(r"^@?internIQ[\s,:]*", "", message.clean_content.strip(), flags=re.I).strip()
             try:
                 answer, intents = await asyncio.to_thread(chat.reply, text, COMMANDS)
             except Exception as e:

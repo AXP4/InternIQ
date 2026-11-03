@@ -156,6 +156,17 @@ class DecideButton(discord.ui.DynamicItem[discord.ui.Button], template=r"decide:
         if interaction.guild_id != config.channel_id("DISCORD_GUILD_ID"):
             return
         db.set_ali_decision(db.connect(), self.posting_id, self.choice)
+        if self.choice == "apply":
+            # Ali's Apply starts the work: write the package, fill the application, then the
+            # usual approval card in #approvals (nothing is submitted before that tap).
+            from interniq.applier import worker
+            place = worker.enqueue(self.posting_id)
+            worker.spawn()
+            note = (" · writing and applying now; the final card comes to #approvals" if place == 1
+                    else f" · queued (#{place}); applications run one at a time")
+            await interaction.response.edit_message(
+                content=f"{interaction.message.content}\n{answer_label(self.choice)}{note}", view=None)
+            return
         await interaction.response.edit_message(
             content=f"{interaction.message.content}\n{answer_label(self.choice)}", view=None)
 
@@ -193,7 +204,8 @@ async def mark_cards(answers: dict[int, str]) -> int:
     return updated
 
 
-HEADLINES = {"skip": "Skip this one?", "ask": "Apply to this one?", "closed": "Link looks dead. Skip?"}
+HEADLINES = {"apply": "Apply to this one?", "skip": "Skip this one?", "ask": "Apply to this one?",
+             "closed": "Link looks dead. Skip?"}
 
 
 def review_card(posting: dict, decision: dict) -> Card:

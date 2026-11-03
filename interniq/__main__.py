@@ -72,6 +72,9 @@ def daily() -> None:
     finally:
         db.set_setting(conn, "daily_running", "")  # the Elevate session is closed
     results = screener.screen_new() if counts["new"] else []
+    if results:  # one card per new posting: Ali's Apply tap starts the application
+        asyncio.run(discord_bot.send_many("DISCORD_QUESTIONS_CHANNEL_ID",
+                                          [discord_bot.review_card(r["posting"], r) for r in results]))
     if not results:
         message = f"📋 Daily check, {today}: **0 new postings today** ({counts['listed']} ENSF postings listed)."
     else:
@@ -81,11 +84,30 @@ def daily() -> None:
             due = (p.get("deadline") or "")[:10]
             lines.append(f"• `{p['id']}` **{p['org']}**, {p['title'][:70]}" + (f" (due {due})" if due else "")
                          + f": {r['decision']}")
+        lines.append("Tap **Apply** or **Skip** on each card in #questions; Apply starts the application.")
         message = "\n".join(lines)
     if counts.get("waiting"):
         message += f"\n{counts['waiting']} more are waiting; they come in tomorrow (max {crawler.MAX_NEW_PER_RUN} a day)."
     print(message)
     asyncio.run(discord_bot.send("DISCORD_LOG_CHANNEL_ID", message[:2000]))
+
+
+def worker() -> None:
+    """Apply to the queued postings (the ones Ali tapped Apply on), one at a time."""
+    from interniq.applier import worker as apply_worker
+
+    apply_worker.work()
+
+
+def queue(*posting_ids: str) -> None:
+    """Queue postings for applying, the same as tapping Apply on their cards: queue 153063"""
+    from interniq.applier import worker as apply_worker
+
+    if not posting_ids:
+        raise SystemExit("Usage: python -m interniq queue <posting id> [more ids]")
+    for posting_id in posting_ids:
+        print(f"{posting_id}: place {apply_worker.enqueue(int(posting_id))}")
+    apply_worker.spawn()
 
 
 def write(*posting_ids: str) -> None:
@@ -256,6 +278,8 @@ COMMANDS = {
     "login": login,
     "crawl": crawl,
     "daily": daily,
+    "worker": worker,
+    "queue": queue,
     "inbox": inbox,
     "screen": screen,
     "decide": decide,

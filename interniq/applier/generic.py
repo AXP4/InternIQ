@@ -397,9 +397,11 @@ def open_application(page: Page, job_url: str) -> None:
 def captcha_box(page: Page):
     for frame in page.frames:
         if "recaptcha/api2/anchor" in frame.url or ("hcaptcha" in frame.url and "checkbox" in frame.url):
-            element = frame.frame_element()
-            if element.is_visible():
-                return frame
+            try:
+                if frame.frame_element().is_visible():
+                    return frame
+            except Exception:  # the frame was removed while we looked (the page re-rendered)
+                continue
     return None
 
 

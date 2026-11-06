@@ -18,15 +18,18 @@ from interniq.elevate import clean_title
 PYTHON = config.ROOT / ".venv" / "Scripts" / "python.exe"
 
 SYSTEM = """You are InternIQ's Discord helper for Ali, a student whose agent applies to
-internships for him. Turn his message into tool calls. Postings can be named by company
-or by their 6 digit id; pass whatever he said to the tools, which look them up.
+internships for him. You see the recent conversation, so use it: if you asked which posting
+and he answers with an id or a name, act on the earlier request with it. "The new posting"
+or "that one" means the posting being discussed, or the newest posting listed below.
+Postings can be named by company or by their 6 digit id; pass that to the tools.
 - He says he applied, submitted, or finished an application himself, or asks you to click
   "I intend to apply": call mark_applied.
 - He wants the agent to apply to a posting, or to retry one that failed: call apply_to.
+- Questions about a posting (length, location, deadline, how to apply): call posting_info.
 - Status, pause, resume, or "check for new postings now": the matching tool.
-If his message isn't one of these, answer in one or two short sentences without tools and
-say what you can do. Reply in a casual, short tone. Never claim something happened that a
-tool result doesn't show."""
+Otherwise answer in one or two short sentences and say what you can do. Casual, short tone.
+Never claim something happened that a tool result doesn't show."""
+
 
 TOOLS = [
     {"name": "mark_applied", "description": "Ali applied to this posting himself: record it as submitted and click "
@@ -34,6 +37,8 @@ TOOLS = [
          "posting": {"type": "string", "description": "company name or posting id, as Ali said it"}},
          "required": ["posting"]}},
     {"name": "apply_to", "description": "Queue a posting for the agent to write and fill (ends at an approval card).",
+     "input_schema": {"type": "object", "properties": {"posting": {"type": "string"}}, "required": ["posting"]}},
+    {"name": "posting_info", "description": "Details of one posting: location, term, length, deadline, how to apply.",
      "input_schema": {"type": "object", "properties": {"posting": {"type": "string"}}, "required": ["posting"]}},
     {"name": "status", "description": "Show the InternIQ status summary.", "input_schema": {"type": "object", "properties": {}}},
     {"name": "pause", "description": "Pause the nightly check.", "input_schema": {"type": "object", "properties": {}}},
@@ -61,6 +66,31 @@ def pick(conn, text: str) -> tuple[dict | None, str]:
         options = "; ".join(f"`{p['id']}` {p['org']}, {clean_title(p['title'])[:50]}" for p in found[:6])
         return None, f"{text!r} matches {len(found)} postings: {options}. Which id?"
     return found[0], ""
+
+
+def posting_info(text: str) -> str:
+    conn = db.connect()
+    posting, problem = pick(conn, text)
+    if not posting:
+        return problem
+    p = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting["id"],)).fetchone())
+    d = conn.execute("SELECT agent_decision AS decision, ali_decision FROM decisions WHERE posting_id = ?", (p["id"],)).fetchone()
+    app = db.get_application(conn, p["id"])
+    parts = [f"**{p['org']}**, {clean_title(p['title'])} (`{p['id']}`)",
+             f"Location: {p.get('location') or 'not listed'}",
+             f"Term: starts {p.get('term_start') or '?'}, {p.get('duration') or 'length not listed'}",
+             f"Deadline: {(p.get('deadline') or 'none')[:10]} · Apply by: {p.get('procedure') or '?'}"]
+    if d:
+        parts.append(f"Screener: {d['decision']}" + (f" · you: {d['ali_decision']}" if d["ali_decision"] else ""))
+    if app:
+        parts.append(f"Application: {app['state']}")
+    return "\n".join(parts)
+
+
+def recent_postings(conn, n: int = 6) -> str:
+    rows = conn.execute("""SELECT p.id, p.org, p.title, d.agent_decision AS decision FROM postings p
+                           LEFT JOIN decisions d ON d.posting_id = p.id ORDER BY p.id DESC LIMIT ?""", (n,))
+    return "\n".join(f"- {r['id']} {r['org']}, {clean_title(r['title'])[:60]} (screener: {r['decision']})" for r in rows)
 
 
 def mark_applied(text: str) -> tuple[str, list[int]]:
@@ -103,11 +133,13 @@ def intend_in_background(posting_ids: list[int]) -> str:
     return "Elevate: " + "; ".join(lines)
 
 
-def reply(message: str, commands: dict) -> tuple[str, list[int]]:
-    """The answer to Ali's message, plus postings whose Elevate click should run next."""
+def reply(message: str, commands: dict, history: list[dict] | None = None) -> tuple[str, list[int]]:
+    """The answer to Ali's message, plus postings whose Elevate click should run next.
+    `history` is the recent conversation in this channel (user / assistant turns)."""
     client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
-    response = client.messages.create(model=config.SCREEN_MODEL, max_tokens=500, system=SYSTEM, tools=TOOLS,
-                                      messages=[{"role": "user", "content": message}])
+    system = SYSTEM + "\n\nNewest postings:\n" + recent_postings(db.connect())
+    response = client.messages.create(model=config.SCREEN_MODEL, max_tokens=500, system=system, tools=TOOLS,
+                                      messages=(history or []) + [{"role": "user", "content": message}])
     texts, intents = [], []
     for block in response.content:
         if block.type == "text" and block.text.strip():
@@ -120,6 +152,8 @@ def reply(message: str, commands: dict) -> tuple[str, list[int]]:
                 intents += ids
             elif block.name == "apply_to":
                 texts.append(apply_to(args.get("posting", "")))
+            elif block.name == "posting_info":
+                texts.append(posting_info(args.get("posting", "")))
             elif block.name == "run_now":
                 texts.append(commands["!run"]())
             else:

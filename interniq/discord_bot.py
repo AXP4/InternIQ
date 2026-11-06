@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -501,6 +502,23 @@ COMMANDS = {
 }
 
 
+_chats: dict[int, list[tuple[float, str, str]]] = {}  # channel -> (time, Ali's text, bot's answer)
+CHAT_TURNS, CHAT_MINUTES = 12, 30
+
+
+def remembered(channel_id: int) -> list[dict]:
+    """The recent conversation in a channel, as Claude messages (oldest first)."""
+    cutoff = time.time() - CHAT_MINUTES * 60
+    turns = [t for t in _chats.get(channel_id, []) if t[0] >= cutoff][-CHAT_TURNS:]
+    _chats[channel_id] = turns
+    return [m for _, asked, answered in turns
+            for m in ({"role": "user", "content": asked}, {"role": "assistant", "content": answered})]
+
+
+def remember(channel_id: int, asked: str, answered: str) -> None:
+    _chats.setdefault(channel_id, []).append((time.time(), asked, answered[:1500]))
+
+
 def run() -> None:
     """Stay online, answer commands, and handle card buttons, only in Ali's server."""
     guild_id = config.channel_id("DISCORD_GUILD_ID")
@@ -524,18 +542,24 @@ def run() -> None:
             return
         # Plain-language requests: "@InternIQ I applied to X". Discord may insert the bot's
         # user or its role (same name), and Ali may just type the name.
+        # Outside #questions any message is for the bot; in #questions plain messages are
+        # answers to the agent's questions, so there it needs the mention.
         me = message.guild.me
         mentioned = (client.user in message.mentions
                      or any(role in me.roles for role in message.role_mentions)
                      or message.content.strip().lower().startswith(("internIQ".lower(), "@internIQ".lower())))
-        if mentioned:
+        if mentioned or message.channel.id != config.channel_id("DISCORD_QUESTIONS_CHANNEL_ID"):
             from interniq import chat
 
             text = re.sub(r"^@?internIQ[\s,:]*", "", message.clean_content.strip(), flags=re.I).strip()
+            if not text:
+                return
+            past = remembered(message.channel.id)
             try:
-                answer, intents = await asyncio.to_thread(chat.reply, text, COMMANDS)
+                answer, intents = await asyncio.to_thread(chat.reply, text, COMMANDS, past)
             except Exception as e:
                 answer, intents = f"Something broke: {str(e)[:200]}", []
+            remember(message.channel.id, text, answer)
             await message.channel.send(answer[:2000])
             if intents:
                 result = await asyncio.to_thread(chat.intend_in_background, intents)

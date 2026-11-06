@@ -476,6 +476,25 @@ def mentions_title(page: Page, posting_title: str) -> bool:
     return bool(distinctive) and all(w in page_words for w in distinctive)
 
 
+def choose_role(page: Page, posting_title: str) -> None:
+    """"What stream / role are you applying to?" pages show cards before the form: click
+    the card that names this posting's distinctive word ("Technical")."""
+    from interniq.elevate import clean_title
+
+    if visible_inputs(page) >= 3:
+        return
+    words = [w for w in re.findall(r"[a-z]+", clean_title(posting_title).lower())
+             if w not in COMMON_TITLE_WORDS and len(w) > 2]
+    for word in words:
+        cards = page.get_by_text(re.compile(rf"^\s*{word}\s*$", re.I)).all()
+        for card in cards:
+            if card.is_visible():
+                card.click()
+                page.wait_for_timeout(3000)
+                print(f"  picked the {word!r} option on the page")
+                return
+
+
 COMMON_TITLE_WORDS = {"intern", "internship", "student", "coop", "co", "op", "stream", "the", "and", "for",
                       "developer", "development", "software", "engineer", "engineering", "summer", "winter",
                       "fall", "spring", "program", "position", "role", "junior", "associate", "analyst", "ai",

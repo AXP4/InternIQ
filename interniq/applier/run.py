@@ -216,6 +216,8 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
             raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
                              "Nothing was filled.")
         driver.ensure_signed_in(page)
+        if hasattr(driver, "choose_role"):
+            driver.choose_role(page, posting["title"])
         fill_until_review(page, filler, driver)
         if hasattr(driver, "card_notes"):
             filler.unsure[:0] = driver.card_notes(page)

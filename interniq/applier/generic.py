@@ -779,6 +779,26 @@ def submitted(page: Page) -> bool:
     return any(phrase in text for phrase in SUBMITTED_TEXT)
 
 
+class SiteRefusedBot(Blocked):
+    """The employer's site turned away the automated browser at submit (Lever's "error
+    verifying your application", Patry's "spam check"). Never worked around: Ali gets a
+    submit-it-yourself card instead."""
+
+
+BOT_REFUSAL = re.compile(r"spam check|error verifying your application|verify (that )?you are (a )?human|"
+                         r"automated (submission|request|traffic)|unusual activity|suspicious activity|"
+                         r"bot (detected|activity)", re.I)
+
+
+def refused_as_bot(page: Page) -> str:
+    try:
+        text = page.locator("body").inner_text()
+    except Exception:
+        return ""
+    line = next((ln.strip() for ln in text.splitlines() if BOT_REFUSAL.search(ln)), "")
+    return line[:250]
+
+
 def submit(page: Page, posting_id: int) -> bool:
     """Press the final button once, only if Ali approved (checked here)."""
     app = db.get_application(db.connect(), posting_id)
@@ -795,6 +815,8 @@ def submit(page: Page, posting_id: int) -> bool:
     shown = page.locator('[role="alert"]:visible, [role="status"]:visible, [aria-live]:visible, '
                          '[class*="success" i]:visible, [class*="toast" i]:visible').all_inner_texts()
     print(f"  after Submit the page shows: {' | '.join(t.strip() for t in shown if t.strip())[:300] or '(no message)'}")
+    if not submitted(page) and (why := refused_as_bot(page)):
+        raise SiteRefusedBot(why)
     return submitted(page)
 
 

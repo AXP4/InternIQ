@@ -13,6 +13,7 @@ import time
 from interniq import browser, db, discord_bot
 from interniq.applier import avature, eightfold, generic, greenhouse, icims, oracle, raise_jobs
 from interniq.applier import workday as wd
+from interniq.elevate import clean_title
 from interniq.applier.filler import Filler
 from interniq.elevate import apply as elevate_apply
 from interniq.elevate import crawler, intent
@@ -175,6 +176,40 @@ def after_submit(context, conn, posting_id: int) -> str:
     return "\n".join(lines)
 
 
+class HandedOff(wd.Blocked):
+    """The site refused the agent's browser at submit; Ali got a submit-it-yourself card."""
+
+
+def submit_or_hand_off(driver, page, posting: dict, folder) -> bool:
+    """Press the approved submit. If the employer's site turns the automated browser away
+    (a spam or bot check), hand the application to Ali with everything he needs."""
+    refused = getattr(driver, "SiteRefusedBot", None)
+    try:
+        return driver.submit(page, posting["id"])
+    except Exception as e:
+        if refused is None or not isinstance(e, refused):
+            raise
+        url = page.url
+        files = [f for f in (folder / n for n in ("Ali_Alanizi_Resume.pdf", "Ali_Alanizi_Cover_Letter.pdf",
+                                                  "Ali_Alanizi_Transcript.pdf", "answers.txt")) if f.exists()]
+        conn = db.connect()
+        with conn:
+            conn.execute("UPDATE applications SET site = 'manual', state = 'pending' WHERE posting_id = ?",
+                         (posting["id"],))
+        text = "\n".join([
+            f"**Submit this one yourself**  `{posting['id']}`",
+            f"**{posting['org']}**, {clean_title(posting['title'])}",
+            f"The site turned the agent's browser away at Submit: \"{e}\". Nothing was sent.",
+            f"1. Open <{url}> in your own browser.",
+            "2. Fill it in from answers.txt below and attach the PDFs.",
+            "3. Tap **✅ Submit** here once it's in (that records it and clicks Elevate's I intend to apply).",
+        ])
+        discord_bot.call(discord_bot.send_many("DISCORD_APPROVALS_CHANNEL_ID",
+                                               [discord_bot.Card(text[:1990], "approve", posting["id"], files)]))
+        db.add_site_note(conn, posting.get("site") or url.split("/")[2], f"refuses automated submits: {e}"[:200])
+        raise HandedOff(f"site refused the bot at submit; handed to Ali ({e})")
+
+
 def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> None:
     conn = db.connect()
     posting = dict(conn.execute("SELECT * FROM postings WHERE id = ?", (posting_id,)).fetchone())
@@ -280,7 +315,7 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
     print("  posting the approval card; keeping the Review page open until Ali decides")
     if wait_for_decision(page, conn, posting_id, label, notes, on_fix=form_fix) != "approved":
         return
-    confirmed = driver.submit(page, posting_id)
+    confirmed = submit_or_hand_off(driver, page, posting, folder)
     # Some sites (EA) show another page after the press that was supposed to send it.
     # Each surprise page is filled (asking Ali when the bank has no answer) and gets its
     # own approval card before anything is pressed again.
@@ -307,7 +342,7 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         if wait_for_decision(page, conn, posting_id, f"{label} (approval {round_number})", notes,
                              on_fix=form_fix) != "approved":
             return
-        confirmed = driver.submit(page, posting_id)
+        confirmed = submit_or_hand_off(driver, page, posting, folder)
     confirm_shot = shot.with_name("submitted.png")
     page.screenshot(path=str(confirm_shot), full_page=True)
     if confirmed:

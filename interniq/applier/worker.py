@@ -91,7 +91,10 @@ def work() -> None:
             print(f"== {posting_id} {label}", flush=True)
             try:
                 apply_one(posting_id)
-            except BaseException as e:  # one bad posting never stops the queue (Blocked is SystemExit-like)
+            except BaseException as e:
+                if type(e).__name__ == "HandedOff":  # Ali already has a submit-it-yourself card
+                    print(f"{posting_id}: {e}", flush=True)
+                    continue  # one bad posting never stops the queue (Blocked is SystemExit-like)
                 print(f"{posting_id}: stopped ({e})", flush=True)
                 discord_bot.call(discord_bot.send(
                     "DISCORD_LOG_CHANNEL_ID",

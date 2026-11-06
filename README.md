@@ -71,6 +71,21 @@ accounts, follows email verification links, reads emailed codes from Outlook, fi
 questions hidden inside web components from the site's own error message, and gives every
 "Submit" that might not be final its own approval card.
 
+### Sites that don't allow automation
+
+Some application systems detect automated browsers and refuse the submission even after
+every field is filled correctly. The agent never tries to get around these checks: it
+recognises the refusal, posts a "submit it yourself" card with the link, the PDFs, and
+every answer it prepared, and records the site so the next application there goes
+straight to me.
+
+| System | What it does at Submit |
+|---|---|
+| Lever (e.g. GeoComply) | "There was an error verifying your application" |
+| Patry Group's own form | "Our spam check stopped this submission" |
+| BambooHR (Convverge) | an "I'm not a robot" box that I tick myself before the agent presses Submit |
+| Job board (Elevate) | blocked the bundled test browser until the crawl was slowed down and moved to a normal Chrome session, after checking with the board's team |
+
 ## Safety rules the agent can't break
 
 - **No submission without my tap.** The submit function checks the database for my approval

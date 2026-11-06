@@ -26,7 +26,7 @@ SHOWS_FILES_ON_REVIEW = True
 APPLY_TEXT = re.compile(r"^\s*(apply|apply now|apply online|apply for (this )?(job|position|role)|"
                         r"start (your )?application|i'?m interested|complete your application|"
                         r"(continue|resume) (your |my )?application)\s*$", re.I)
-NEXT_TEXT = re.compile(r"^\s*(next|continue|save (and|&) continue|save (and|&) next|proceed|next step|"
+NEXT_TEXT = re.compile(r"^\s*(next|next page|continue|save (and|&) continue|save (and|&) next|proceed|next step|"
                        r"complete your application|(continue|resume) (your |my )?application)\s*[>›»]?\s*$", re.I)
 SUBMIT_TEXT = re.compile(r"^\s*(submit|submit (my |your )?application|apply|send( my)? application|"
                          r"complete application|finish)\s*$", re.I)

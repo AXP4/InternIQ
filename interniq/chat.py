@@ -12,6 +12,7 @@ import subprocess
 
 import anthropic
 
+from interniq import usage
 from interniq import config, db
 from interniq.elevate import clean_title
 
@@ -136,7 +137,7 @@ def intend_in_background(posting_ids: list[int]) -> str:
 def reply(message: str, commands: dict, history: list[dict] | None = None) -> tuple[str, list[int]]:
     """The answer to Ali's message, plus postings whose Elevate click should run next.
     `history` is the recent conversation in this channel (user / assistant turns)."""
-    client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+    client = usage.client()
     system = SYSTEM + "\n\nNewest postings:\n" + recent_postings(db.connect())
     response = client.messages.create(model=config.SCREEN_MODEL, max_tokens=500, system=system, tools=TOOLS,
                                       messages=(history or []) + [{"role": "user", "content": message}])

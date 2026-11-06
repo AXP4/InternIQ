@@ -19,6 +19,7 @@ from pathlib import Path
 
 import discord
 
+from interniq import usage
 from interniq import config, db
 from interniq.elevate import clean_title
 from interniq.writer import package
@@ -452,6 +453,7 @@ def status_message(*_) -> str:
         "**InternIQ status**",
         f"Postings saved: {s['total']} ({s['listed']} on the latest crawl)",
         f"**To do:** {todo_line(conn)}",
+        f"API credit: {usage.balance_line()}",
         f"Deadlines in the next 7 days: {s['due_7_days']}",
         f"Status: {format_counts(s['status'])}",
         f"Screener: {skips}",
@@ -470,6 +472,18 @@ def learning_command(*args) -> str:
     state = "on" if learning_mode(conn) else "off"
     meaning = "every skip comes here for review" if state == "on" else "only asks and dead links come here"
     return f"Learning mode is **{state}**: {meaning}."
+
+
+def balance_command(*args) -> str:
+    """!balance 14.32: Ali's balance from console.anthropic.com (Billing); spending counts from now."""
+    try:
+        dollars = float(args[0].lstrip("$")) if args else None
+    except ValueError:
+        dollars = None
+    if dollars is None:
+        return f"API credit: {usage.balance_line()}\nSet it with `!balance 14.32` (your balance on the Console's Billing page)."
+    usage.set_balance(dollars)
+    return f"💳 Balance set to **${dollars:.2f}**. I'll count every Claude call from here; `!status` shows what's left."
 
 
 def pause_command(*_) -> str:
@@ -497,6 +511,7 @@ COMMANDS = {
     "!status": status_message,
     "!learning": learning_command,
     "!pause": pause_command,
+    "!balance": balance_command,
     "!resume": resume_command,
     "!run": run_command,
 }

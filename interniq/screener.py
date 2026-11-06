@@ -12,6 +12,7 @@ from typing import Literal
 import anthropic
 from pydantic import BaseModel, Field
 
+from interniq import usage
 from interniq import config, db
 
 RULES = config.ROOT / "RULES.md"
@@ -124,7 +125,7 @@ def screen_new(model: str | None = None) -> list[dict]:
     """Screen every posting with status 'new'. Returns the results with posting info."""
     model = model or config.SCREEN_MODEL
     conn = db.connect()
-    client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+    client = usage.client()
     examples = db.ali_examples(conn)
     results = []
     for row in db.postings_with_status(conn, "new"):

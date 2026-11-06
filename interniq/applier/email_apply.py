@@ -14,6 +14,7 @@ from pathlib import Path
 import anthropic
 import yaml
 
+from interniq import usage
 from interniq import browser, config, db, discord_bot, outlook
 from interniq.applier import answers, run
 from interniq.elevate import apply as elevate_apply
@@ -55,7 +56,7 @@ def signature() -> str:
 
 
 def compose(posting: dict, summary: dict, attachments: list[str]) -> dict:
-    client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+    client = usage.client()
     letter = "\n\n".join(summary["package"].get("paragraphs", []))
     keys = ("org", "title", "location", "email", "additional_info", "description")
     prompt = (f"<signature>\n{signature()}\n</signature>\n"

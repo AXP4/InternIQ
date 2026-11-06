@@ -10,6 +10,7 @@ import json
 
 import anthropic
 
+from interniq import usage
 from interniq import config, db, outlook
 from interniq.applier import answers
 from interniq.applier import workday as wd
@@ -146,7 +147,7 @@ class Filler:
         self.step_shots: list = []
         self.step_answers: list[dict] = []  # each filled step's questions and final values
         self.touched: dict[str, str] = {}  # field id -> how it got its value (filled, asked Ali)
-        self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+        self.client = usage.client()
         notes = db.site_notes(db.connect(), site)
         text = "\n\n".join([
             INSTRUCTIONS,

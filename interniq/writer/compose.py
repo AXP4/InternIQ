@@ -14,6 +14,7 @@ import anthropic
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
+from interniq import usage
 from interniq import config
 
 RULES = config.ROOT / "RULES.md"
@@ -114,7 +115,7 @@ class Composer:
 
     def __init__(self, posting: dict, letter_wanted: bool = True, previous: dict | None = None,
                  feedback: str | None = None):
-        self.client = anthropic.Anthropic(api_key=config.require("ANTHROPIC_API_KEY"))
+        self.client = usage.client()
         self.system = system_prompt()
         self.messages = [{"role": "user", "content": posting_message(posting, letter_wanted, previous, feedback)}]
 

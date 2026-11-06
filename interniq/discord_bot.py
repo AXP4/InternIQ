@@ -300,6 +300,7 @@ def approval_card(posting_id: int) -> Card:
         head.append(f"Your fixes so far: {' | '.join(summary['feedback'])}")
     folder = package.OUTPUT_DIR / str(posting_id)
     files = [folder / name for name in summary["files"]] if "files" in summary else sorted(folder.glob("*.pdf"))
+    files += [f for f in sorted(folder.glob("Ali_Alanizi_Coding_Challenge_*.pdf")) if f not in files]  # extra documents
     # Every filled step (sites without a review page send from the last step), else the
     # single Review screenshot. Discord allows 10 files per message.
     shots = [folder / name for name in run_notes.get("step_shots", []) if (folder / name).exists()]

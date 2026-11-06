@@ -47,7 +47,7 @@ def spawn() -> None:
     """Start a worker in the background (it exits at once if one is already running)."""
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(LOG, "a", encoding="utf-8") as log:
-        subprocess.Popen([str(PYTHON), "-m", "interniq", "worker"], cwd=str(config.ROOT), stdout=log,
+        subprocess.Popen([str(PYTHON), "-u", "-m", "interniq", "worker"], cwd=str(config.ROOT), stdout=log,
                          stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW,
                          env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 

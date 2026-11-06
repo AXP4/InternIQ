@@ -451,7 +451,18 @@ def dismiss_cookies(page: Page) -> None:
 
 
 GENERIC_HEADING = re.compile(r"^(careers?|career cent(re|er)|jobs?|job search|search jobs|current openings|"
-                             r"join (us|our team)|opportunities)$", re.I)
+                             r"join (us|our team)|opportunities|apply( now| here| online)?|application( form)?|"
+                             r"job application|submit your application)$", re.I)
+
+
+def mentions_title(page: Page, posting_title: str) -> bool:
+    """General "Apply" pages (one form for every role) may not show the job as a heading;
+    the page still names it somewhere, often in a role dropdown."""
+    from interniq.applier.workday import titles_match
+
+    text = page.locator("body").inner_text()
+    options = page.evaluate("() => [...document.querySelectorAll('option, [role=option]')].map(o => o.textContent.trim())")
+    return any(titles_match(posting_title, chunk) for chunk in [text[:20000]] + options)
 
 
 def job_heading(page: Page) -> str:

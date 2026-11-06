@@ -211,7 +211,8 @@ def run_one(context, page, posting_id: int, job_url: str | None, dry: bool) -> N
         print(f"  page title: {page_title!r}")
         # Never fill a page for a different job than the posting (a dry run fills a decoy
         # on purpose, so it only reports the page's title).
-        if not dry and not wd.titles_match(posting["title"], page_title):
+        if not dry and not wd.titles_match(posting["title"], page_title) and not (
+                hasattr(driver, "mentions_title") and driver.mentions_title(page, posting["title"])):
             raise wd.Blocked(f"The page is for {page_title!r}, not this posting ({posting['title']!r}). "
                              "Nothing was filled.")
         driver.ensure_signed_in(page)

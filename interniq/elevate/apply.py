@@ -28,7 +28,10 @@ SUBMITTED = "Application Submitted"
 # Elevate's document type ids; the apply form's dropdowns are named after them too.
 # "combined" is one merged PDF (letter, resume, transcript) for postings that ask for
 # everything in one document; it goes in the resume slot, the only required one.
-DOC_TYPES = {"cover_letter": "30", "resume": "31", "transcript": "32", "combined": "31"}
+# "extra" is a document the posting asks for under "Other" (a coding challenge link):
+# Elevate's form has no Other slot, so it goes in the cover letter slot when that's free.
+DOC_TYPES = {"cover_letter": "30", "resume": "31", "transcript": "32", "combined": "31", "extra": "30"}
+EXTRA_PATTERN = "Ali_Alanizi_Coding_Challenge_*.pdf"
 TRANSCRIPT_NAME = "Ali_Alanizi_Transcript"
 ONE_DOCUMENT = re.compile(r"\b(in|as|into) (one|a single) (document|pdf|file)\b", re.IGNORECASE)
 
@@ -45,6 +48,8 @@ def doc_name(kind: str, posting_id: int) -> str:
     """The library name for one posting's document, e.g. Ali_Alanizi_Resume_151913."""
     if kind == "transcript":
         return TRANSCRIPT_NAME
+    if kind == "extra":
+        return f"Ali_Alanizi_Coding_Challenge_{posting_id}"
     label = {"resume": "Resume", "cover_letter": "Cover_Letter", "combined": "Application"}[kind]
     return f"Ali_Alanizi_{label}_{posting_id}"
 

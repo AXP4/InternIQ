@@ -378,6 +378,15 @@ def run_elevate(context, page, posting_id: int) -> None:
     if "transcript" in materials:
         kinds.append("transcript")
     folder = package.OUTPUT_DIR / str(posting_id)
+    extras = sorted(folder.glob(elevate_apply.EXTRA_PATTERN))
+    if "other" in materials and extras:
+        if "cover_letter" in kinds:
+            raise wd.Blocked("The posting wants a cover letter and an extra document, but Elevate has one slot "
+                             "for both; merge them or submit it yourself")
+        docs["extra"] = extras[-1]
+        kinds.append("extra")
+    elif "other" in materials:
+        print("  the posting asks for an 'Other' document and none is prepared; it is not attached")
     if elevate_apply.ONE_DOCUMENT.search(f"{posting['description']} {posting['additional_info'] or ''}"):
         # Letter first, then resume, then transcript, as one PDF.
         docs["combined"] = folder / "Ali_Alanizi_Application.pdf"

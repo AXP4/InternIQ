@@ -462,7 +462,24 @@ def mentions_title(page: Page, posting_title: str) -> bool:
 
     text = page.locator("body").inner_text()
     options = page.evaluate("() => [...document.querySelectorAll('option, [role=option]')].map(o => o.textContent.trim())")
-    return any(titles_match(posting_title, chunk) for chunk in [text[:20000]] + options)
+    if any(titles_match(posting_title, chunk) for chunk in [text[:20000]] + options):
+        return True
+    # One form for every role on the employer's own site (the posting's link): the words
+    # that set this job apart ("Technical" in "AI Developer Intern (Technical stream)")
+    # must all be on the page.
+    from interniq.elevate import clean_title
+    if host(page).removeprefix("www.") != _job_url["url"].split("/")[2].removeprefix("www."):
+        return False
+    distinctive = [w for w in re.findall(r"[a-z]+", clean_title(posting_title).lower())
+                   if w not in COMMON_TITLE_WORDS and len(w) > 2]
+    page_words = set(re.findall(r"[a-z]+", text.lower()))
+    return bool(distinctive) and all(w in page_words for w in distinctive)
+
+
+COMMON_TITLE_WORDS = {"intern", "internship", "student", "coop", "co", "op", "stream", "the", "and", "for",
+                      "developer", "development", "software", "engineer", "engineering", "summer", "winter",
+                      "fall", "spring", "program", "position", "role", "junior", "associate", "analyst", "ai",
+                      "term", "month", "months"}
 
 
 def job_heading(page: Page) -> str:

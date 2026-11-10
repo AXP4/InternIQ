@@ -77,6 +77,13 @@ def latest_code(context: BrowserContext, max_age_minutes: int = 10, wait_seconds
         page.close()
 
 
+def wrong_address(shown: str, to: str) -> bool:
+    """True if a recipient pill shows an address other than `to`. The pill's text also holds
+    invisible characters and its remove icon, so only the address itself is compared."""
+    found = re.search(r"[\w.+-]+@[\w.-]+", shown)
+    return bool(found) and found[0].lower() != to.lower()
+
+
 def send(context: BrowserContext, to: str, subject: str, body: str, files: list) -> None:
     """Send one email with attachments; raises OutlookError unless it shows up in Sent Items."""
     page = open_mail(context)
@@ -89,10 +96,12 @@ def send(context: BrowserContext, to: str, subject: str, body: str, files: list)
         page.wait_for_timeout(1500)
         page.keyboard.press("Enter")  # turns the address into a recipient
         page.wait_for_timeout(1000)
-        # One valid recipient pill. Directory contacts show a name; anyone else shows the address.
+        # One recipient pill. Directory contacts show a name and a "valid" style; outside
+        # addresses (every employer) show the address and a "warning" style.
         pills = to_box.locator("._EType_RECIPIENT_ENTITY")
         shown = pills.first.inner_text().strip() if pills.count() else ""
-        if pills.count() != 1 or not to_box.locator("[class*=validPill]").count() or ("@" in shown and shown.lower() != to.lower()):
+        bad = to_box.locator("[class*=errorPill], [class*=invalidPill]").count()
+        if pills.count() != 1 or bad or wrong_address(shown, to):
             raise OutlookError(f"the To field doesn't hold exactly {to} (shows {shown!r})")
         page.locator('input[aria-label="Subject"]').first.fill(subject)
         message = page.locator('div[role="textbox"][aria-label="Message body"]').first
